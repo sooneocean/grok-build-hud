@@ -2,10 +2,12 @@
 
 ## 0.3.12
 
-### Repo
+### Repo / docs
 - **Gitea rename**: `Redredchen01/grok-hud` → `Redredchen01/grok-build-hud`
   (same host). Clone URL, remotes, package/plugin homepage, and all docs updated.
 - CLI short aliases (`grok-hud`, `grok-hud-run`) unchanged.
+- **Disclaimer**: docs clarify this is a **third-party / community** project,
+  not an xAI official plugin; “official plugin format” wording removed.
 
 ## 0.3.11
 

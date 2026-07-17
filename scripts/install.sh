@@ -43,7 +43,7 @@ node bin/grok-build-hud.js --install-dashboard
 node bin/grok-build-hud.js --theme auto
 node bin/grok-build-hud.js --preset full
 
-echo "==> [5/5] 注册为 Grok 插件 (commands / skills / hooks)"
+echo "==> [5/5] 注册为本地 Grok 插件（第三方 / 非官方 marketplace）"
 if command -v grok >/dev/null 2>&1; then
   # Prefer enable after install; re-run is ok for updates
   # Use absolute path (no trailing /.) so installed-plugins id stays stable
@@ -67,7 +67,7 @@ fi
 
 echo ""
 VER="$(node -e "import('node:fs').then(fs=>console.log(JSON.parse(fs.readFileSync('package.json','utf8')).version))" 2>/dev/null || echo "?")"
-echo "完成。grok-build-hud v${VER}（Grok 插件 + 同窗口 HUD）"
+echo "完成。grok-build-hud v${VER}（第三方插件 + 同窗口 HUD，非 xAI 官方）"
 echo ""
 echo "  启动 Grok + 底部 HUD：  grok"
 echo "  看当前状态一次：        grok-hud status"

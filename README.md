@@ -1,6 +1,6 @@
 # grok-build-hud
 
-**Grok Build 官方插件格式的实时状态条**
+**面向 Grok Build 的第三方实时状态条**（社区自研，非 xAI 官方）
 
 > English: [README.en.md](./README.en.md)
 
@@ -25,17 +25,20 @@ Grok 4.5 · AI FILM SPACE/0717 · ●
 仓库：http://172.238.15.154:3000/Redredchen01/grok-build-hud  
 插件名：`grok-build-hud` · 版本见 [`plugin.json`](./plugin.json)
 
+> **说明：** 本项目由我们自行开发与维护，**不是** xAI / Grok Build 官方插件或官方功能。仅兼容 Grok 的插件安装机制（`plugin.json` 等），便于本地 `grok plugin install`。
+
 ---
 
 ## 这是什么
 
 | 层级 | 说明 |
 |------|------|
-| **交付形态** | **Grok 插件**（`plugin.json` + `commands/` + `skills/` + `hooks/`） |
+| **身份** | **第三方 / 社区自研**工具，与 xAI 无官方从属 |
+| **交付形态** | 按 Grok **插件机制**打包（`plugin.json` + `commands/` + `skills/` + `hooks/`） |
 | **运行时** | Node CLI（`grok-hud` / `grok-build-hud`）+ **同窗口 tmux 状态条** |
 | **Skill** | 插件内附带，方便会话里被 agent 识别与调用 |
 
-**一句话：** 给 Grok Build 用的底部状态栏——上下文、配额、token、工具与待办，一眼看到。
+**一句话：** 给我们自己用的 Grok Build 底部状态栏——上下文、配额、token、工具与待办，一眼看到；顺带可装成 Grok 插件。
 
 ---
 
@@ -72,7 +75,7 @@ Grok 4.5 · AI FILM SPACE/0717 · ●
 
 ## 安装（推荐一键）
 
-从 Gitea 克隆后执行安装脚本：**编译 CLI → 装 tmux 状态条 → 注册为 Grok 插件**。
+从 Gitea 克隆后执行安装脚本：**编译 CLI → 装 tmux 状态条 → 注册为本地 Grok 插件（第三方）**。
 
 ```bash
 git clone http://172.238.15.154:3000/Redredchen01/grok-build-hud.git
@@ -123,7 +126,9 @@ npm run install-local
 # 等价于：--install-dashboard + --theme auto + --preset full
 ```
 
-### 2）注册为 Grok 插件（斜杠命令 + skill + session hooks）
+### 2）注册为本地 Grok 插件（斜杠命令 + skill + session hooks）
+
+> 这是把**本仓库**装进本机 Grok 的插件目录，不是从 xAI 官方 marketplace 安装。
 
 须先完成编译（插件 hooks 依赖 `dist/`）：
 
@@ -282,7 +287,7 @@ grok-build-hud --theme auto
 
 ## 插件结构
 
-本仓库按 Grok 插件清单组织，可直接 `grok plugin install .`：
+本仓库按 Grok 的**插件清单约定**组织（便于本地安装），可直接 `grok plugin install .`：
 
 ```text
 grok-build-hud/               # Gitea 仓库目录名
@@ -374,4 +379,4 @@ npm run plugin:validate   # 需本机有 grok CLI
 
 ## License
 
-MIT。第三方工具，与 xAI 无官方从属关系；配额接口以 xAI 实际 API 为准，可能变更。
+MIT。**第三方 / 社区自研**，与 xAI 无官方从属、无官方背书；不代表 xAI 观点或产品。配额等接口以 xAI 实际 API 为准，可能变更。

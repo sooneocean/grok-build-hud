@@ -6,7 +6,7 @@
     {
       "name": "grok-build-hud",
       "source": { "type": "local", "path": ".." },
-      "description": "Grok Build live multi-line status strip (context, quota, tokens, tools) — same-window tmux HUD",
+      "description": "Third-party Grok Build status strip (not xAI official) — context, quota, tokens, tools; same-window tmux HUD",
       "category": "monitoring"
     }
   ]

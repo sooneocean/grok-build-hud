@@ -4,7 +4,7 @@
 
 ## 定位
 
-本仓库以 **Grok 插件** 形式交付（`plugin.json` + `commands/` + `skills/` + `hooks/`），运行时依赖 Node CLI + 同窗口 tmux 状态条。改文档时保持「插件优先」表述。
+本仓库是**我们自研的第三方工具**（非 xAI 官方），以 Grok **插件机制**交付（`plugin.json` + `commands/` + `skills/` + `hooks/`），运行时依赖 Node CLI + 同窗口 tmux 状态条。文档中勿写成「官方插件」。
 
 ## 环境
 

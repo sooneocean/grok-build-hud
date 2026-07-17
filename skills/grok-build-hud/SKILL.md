@@ -5,7 +5,7 @@ description: Grok Build 实时状态条（同窗口多行：上下文、配额�
 
 # grok-build-hud
 
-**Grok Build 插件**：同窗口实时状态条（tmux）——上下文、配额、入/出/缓存 token、工具与待办。读本机会话文件与已有登录查配额，不另开窗口。
+**第三方 Grok Build 状态条（非 xAI 官方）**：同窗口实时状态条（tmux）——上下文、配额、入/出/缓存 token、工具与待办。读本机会话文件与已有登录查配额，不另开窗口。按 Grok 插件机制打包，便于本地安装。
 
 ## What it shows
 

@@ -4,7 +4,7 @@ description: Install grok-build-hud dashboard + same-window multi-line status
 
 # grok-build-hud setup
 
-本仓库是 **Grok 插件**（`plugin.json`）。完整体验 = 插件 + 同窗口 tmux 状态条。
+本仓库是**第三方** Grok 插件（`plugin.json`，非 xAI 官方）。完整体验 = 本地插件 + 同窗口 tmux 状态条。
 
 ## 推荐：一键安装
 

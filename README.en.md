@@ -1,6 +1,6 @@
 # grok-build-hud
 
-**Live multi-line status strip for [Grok Build](https://x.ai/cli) — shipped as a Grok plugin**
+**Third-party live status strip for [Grok Build](https://x.ai/cli)** — community-built, **not** an xAI official plugin
 
 > Primary docs (Chinese): [README.md](./README.md)
 
@@ -25,17 +25,20 @@ ctx ██████░░░░ 50% (252k/500k) · i … o … c 99% · use 2
 Repo: http://172.238.15.154:3000/Redredchen01/grok-build-hud  
 Plugin id: `grok-build-hud` · version in [`plugin.json`](./plugin.json)
 
+> **Disclaimer:** Built and maintained by us (community / third-party). **Not** affiliated with, endorsed by, or part of xAI / official Grok Build. We only use Grok’s local plugin packaging (`plugin.json`, etc.) so you can `grok plugin install` from this repo.
+
 ---
 
 ## What it is
 
 | Layer | Role |
 |-------|------|
-| **Delivery** | **Grok plugin** (`plugin.json` + `commands/` + `skills/` + `hooks/`) |
+| **Identity** | **Third-party / community** tool — not xAI official |
+| **Delivery** | Packaged for Grok’s **plugin mechanism** (`plugin.json` + `commands/` + `skills/` + `hooks/`) |
 | **Runtime** | Node CLI + **same-window tmux status strip** |
 | **Skill** | Bundled agent skill for in-session discovery |
 
-One line: a bottom status bar for Grok Build — context, quota, tokens, tools, todos.
+One line: our own bottom status bar for Grok Build — context, quota, tokens, tools, todos — installable as a local Grok plugin.
 
 ---
 
@@ -49,7 +52,7 @@ One line: a bottom status bar for Grok Build — context, quota, tokens, tools, 
 
 ## Install (recommended)
 
-One script: **build CLI → install tmux HUD → register as Grok plugin**.
+One script: **build CLI → install tmux HUD → register as a local (third-party) Grok plugin**.
 
 ```bash
 git clone http://172.238.15.154:3000/Redredchen01/grok-build-hud.git
@@ -84,7 +87,9 @@ npm install && npm run build && npm link
 npm run install-local
 ```
 
-### Register as Grok plugin (slash commands + skill + hooks)
+### Register as a local Grok plugin (slash commands + skill + hooks)
+
+Installs **this repo** into your machine’s Grok plugin directory — not an xAI official marketplace package.
 
 Build first (`dist/` is required by hooks):
 
@@ -184,4 +189,4 @@ Primary documentation is **Chinese** ([README.md](./README.md)). Commit messages
 
 ## License
 
-MIT. Unofficial third-party tool; not affiliated with xAI.
+MIT. **Third-party / community-built** — not affiliated with, endorsed by, or part of xAI. Quota APIs follow xAI and may change.
