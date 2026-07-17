@@ -1,12 +1,12 @@
 {
   "name": "grok-build-hud",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "description": "Grok Build 插件：同窗口实时状态条（上下文、配额、入出缓存 token、工具与待办）；tmux 多行 HUD + 会话斜杠命令",
   "author": {
     "name": "Redredchen01"
   },
-  "homepage": "http://172.238.15.154:3000/Redredchen01/grok-hud",
-  "repository": "http://172.238.15.154:3000/Redredchen01/grok-hud",
+  "homepage": "http://172.238.15.154:3000/Redredchen01/grok-build-hud",
+  "repository": "http://172.238.15.154:3000/Redredchen01/grok-build-hud",
   "commands": "./commands",
   "skills": "./skills",
   "hooks": "./hooks/hooks.json"

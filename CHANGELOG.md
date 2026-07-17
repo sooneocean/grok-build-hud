@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.12
+
+### Repo
+- **Gitea rename**: `Redredchen01/grok-hud` → `Redredchen01/grok-build-hud`
+  (same host). Clone URL, remotes, package/plugin homepage, and all docs updated.
+- CLI short aliases (`grok-hud`, `grok-hud-run`) unchanged.
+
 ## 0.3.11
 
 ### Docs / packaging

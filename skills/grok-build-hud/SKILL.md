@@ -23,8 +23,8 @@ Data sources (local):
 ## Install once (plugin + HUD)
 
 ```bash
-git clone http://172.238.15.154:3000/Redredchen01/grok-hud.git
-cd grok-hud
+git clone http://172.238.15.154:3000/Redredchen01/grok-build-hud.git
+cd grok-build-hud
 bash scripts/install.sh
 ```
 

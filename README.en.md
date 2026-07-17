@@ -22,7 +22,7 @@ ctx ██████░░░░ 50% (252k/500k) · i … o … c 99% · use 2
 | Multi-terminal | Independent session per tab |
 | Language | Default **简体中文**; English / 繁體 available |
 
-Repo: http://172.238.15.154:3000/Redredchen01/grok-hud  
+Repo: http://172.238.15.154:3000/Redredchen01/grok-build-hud  
 Plugin id: `grok-build-hud` · version in [`plugin.json`](./plugin.json)
 
 ---
@@ -52,8 +52,8 @@ One line: a bottom status bar for Grok Build — context, quota, tokens, tools, 
 One script: **build CLI → install tmux HUD → register as Grok plugin**.
 
 ```bash
-git clone http://172.238.15.154:3000/Redredchen01/grok-hud.git
-cd grok-hud
+git clone http://172.238.15.154:3000/Redredchen01/grok-build-hud.git
+cd grok-build-hud
 bash scripts/install.sh
 ```
 

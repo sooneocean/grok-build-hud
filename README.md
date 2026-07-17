@@ -22,7 +22,7 @@ Grok 4.5 · AI FILM SPACE/0717 · ●
 | 多终端 | 每个标签页**独立** session，互不串线 |
 | 语言 | 默认**简体中文**，可切英文 / 繁體 |
 
-仓库：http://172.238.15.154:3000/Redredchen01/grok-hud  
+仓库：http://172.238.15.154:3000/Redredchen01/grok-build-hud  
 插件名：`grok-build-hud` · 版本见 [`plugin.json`](./plugin.json)
 
 ---
@@ -75,8 +75,8 @@ Grok 4.5 · AI FILM SPACE/0717 · ●
 从 Gitea 克隆后执行安装脚本：**编译 CLI → 装 tmux 状态条 → 注册为 Grok 插件**。
 
 ```bash
-git clone http://172.238.15.154:3000/Redredchen01/grok-hud.git
-cd grok-hud
+git clone http://172.238.15.154:3000/Redredchen01/grok-build-hud.git
+cd grok-build-hud
 bash scripts/install.sh
 ```
 
@@ -117,7 +117,7 @@ export PATH="$(npm prefix -g)/bin:$HOME/.local/bin:$PATH"
 ### 1）仅 CLI + 同窗口状态条（无心功能）
 
 ```bash
-cd /path/to/grok-hud
+cd /path/to/grok-build-hud
 npm install && npm run build && npm link
 npm run install-local
 # 等价于：--install-dashboard + --theme auto + --preset full
@@ -128,7 +128,7 @@ npm run install-local
 须先完成编译（插件 hooks 依赖 `dist/`）：
 
 ```bash
-cd /path/to/grok-hud
+cd /path/to/grok-build-hud
 npm install && npm run build
 grok plugin install . --trust
 grok plugin enable grok-build-hud
@@ -144,7 +144,7 @@ grok plugin details grok-build-hud
 ### 3）从本机已有源码目录更新
 
 ```bash
-cd /path/to/grok-hud
+cd /path/to/grok-build-hud
 git pull
 bash scripts/install.sh
 # 或：grok plugin update grok-build-hud
@@ -285,7 +285,7 @@ grok-build-hud --theme auto
 本仓库按 Grok 插件清单组织，可直接 `grok plugin install .`：
 
 ```text
-grok-hud/                      # Gitea 仓库目录名
+grok-build-hud/               # Gitea 仓库目录名
 ├── plugin.json                # 插件清单（name / commands / skills / hooks）
 ├── .grok-plugin/
 │   └── marketplace.json       # 本地 marketplace 元数据

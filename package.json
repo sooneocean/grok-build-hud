@@ -1,6 +1,6 @@
 {
   "name": "grok-build-hud",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "description": "Grok Build 插件：同窗口实时状态条（上下文、配额、token、工具与待办）；plugin + CLI + tmux HUD",
   "type": "module",
   "main": "dist/src/index.js",
@@ -54,12 +54,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "http://172.238.15.154:3000/Redredchen01/grok-hud.git"
+    "url": "http://172.238.15.154:3000/Redredchen01/grok-build-hud.git"
   },
   "bugs": {
-    "url": "http://172.238.15.154:3000/Redredchen01/grok-hud/issues"
+    "url": "http://172.238.15.154:3000/Redredchen01/grok-build-hud/issues"
   },
-  "homepage": "http://172.238.15.154:3000/Redredchen01/grok-hud",
+  "homepage": "http://172.238.15.154:3000/Redredchen01/grok-build-hud",
   "devDependencies": {
     "@types/node": "^22.13.10",
     "typescript": "^5.8.2"
