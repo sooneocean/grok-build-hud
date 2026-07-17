@@ -35,8 +35,8 @@ One-shot: build CLI → install tmux dashboard → `grok plugin install . --trus
 ```bash
 grok                              # wrapped: Grok + bottom HUD (same tab)
 grok-hud status                   # one-shot print
-grok-hud settings                 # language (中/英), preset, rows
-grok-hud lang zh|en|tw
+grok-hud settings                 # language (default en; 中文可选), preset, rows
+grok-hud lang en|zh|tw            # en default
 grok-build-hud --preset full|essential|minimal
 grok-build-hud --theme auto       # follow Grok [ui].theme
 grok-hud stop                     # stop dashboard daemon

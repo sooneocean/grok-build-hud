@@ -106,9 +106,9 @@ describe("layout", () => {
     for (const ln of narrow) {
       assert.ok(visibleLen(ln) <= 50, `line too long: ${visibleLen(ln)} ${stripTmuxStyles(ln)}`);
     }
-    // hierarchy styles present on wide (default language 中文 labels)
+    // hierarchy styles present on wide (default language English labels)
     const joined = wide.join("\n");
     assert.match(joined, /italics|dim|bold/);
-    assert.match(joined, /入 |出 |缓 |窗 /);
+    assert.match(joined, /\bi |\bo |\bc |ctx /);
   });
 });

@@ -13,7 +13,8 @@ import type { SessionSnapshot } from "../src/types.js";
 
 describe("i18n + settings language", () => {
   it("defaults and normalizes languages", () => {
-    assert.equal(normalizeLang(undefined), "zh-Hans");
+    assert.equal(normalizeLang(undefined), "en");
+    assert.equal(normalizeLang(""), "en");
     assert.equal(normalizeLang("zh"), "zh-Hans");
     assert.equal(normalizeLang("en"), "en");
     assert.equal(normalizeLang("tw"), "zh-Hant");

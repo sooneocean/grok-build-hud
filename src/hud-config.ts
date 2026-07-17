@@ -58,8 +58,8 @@ export const PRESET_FULL: HudDisplayConfig = {
   preset: "full",
   lineLayout: "expanded",
   pathLevels: 2,
-  /** Default UI language: 简体中文 (switch to en in settings) */
-  language: "zh-Hans",
+  /** Default UI language: English (switch to 中文 in settings) */
+  language: "en",
   statusLines: 3,
   bold: true,
   barWidth: 14,
@@ -150,7 +150,7 @@ export function loadHudConfig(
     if (!fs.existsSync(p)) {
       return {
         ...PRESET_FULL,
-        language: "zh-Hans",
+        language: "en",
         display: { ...PRESET_FULL.display },
       };
     }
@@ -164,8 +164,8 @@ export function loadHudConfig(
     return {
       ...base,
       ...raw,
-      // Prefer saved language; default 中文 when missing
-      language: raw.language ?? base.language ?? "zh-Hans",
+      // Prefer saved language; default English when missing
+      language: raw.language ?? base.language ?? "en",
       bold: raw.bold ?? base.bold ?? true,
       barWidth: raw.barWidth ?? base.barWidth ?? 14,
       statusLines: raw.statusLines ?? base.statusLines ?? 3,
@@ -174,13 +174,13 @@ export function loadHudConfig(
   } catch {
     return {
       ...PRESET_FULL,
-      language: "zh-Hans",
+      language: "en",
       display: { ...PRESET_FULL.display },
     };
   }
 }
 
-/** Ensure config exists with Chinese default (idempotent). */
+/** Ensure config exists with English default (idempotent). */
 export function ensureDefaultConfig(
   grokHome = path.join(os.homedir(), ".grok"),
 ): HudDisplayConfig {
@@ -188,7 +188,7 @@ export function ensureDefaultConfig(
   if (!fs.existsSync(p)) {
     const cfg = {
       ...PRESET_FULL,
-      language: "zh-Hans" as const,
+      language: "en" as const,
       display: { ...PRESET_FULL.display },
     };
     saveHudConfig(cfg, grokHome);

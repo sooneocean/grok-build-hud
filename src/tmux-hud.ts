@@ -22,12 +22,9 @@ import {
 /** Brand-new Terminal status: ctx 0%, no leakage from previous windows. */
 export function seedIdleTmuxStatus(instDir: string): void {
   fs.mkdirSync(instDir, { recursive: true });
-  const idleSingle = "窗 ░░░░░░░░░░ 0% · —\n";
-  const idleLines = [
-    "— · —",
-    "窗 ░░░░░░░░░░ 0% · —",
-    "",
-  ].join("\n") + "\n";
+  // English labels (default UI language); live dashboard rewrites with user lang
+  const idleSingle = "ctx ░░░░░░░░░░ 0% · —\n";
+  const idleLines = ["— · —", "ctx ░░░░░░░░░░ 0% · —", ""].join("\n") + "\n";
   fs.writeFileSync(path.join(instDir, "tmux-status.txt"), idleSingle, "utf8");
   fs.writeFileSync(path.join(instDir, "tmux-lines.txt"), idleLines, "utf8");
   fs.writeFileSync(path.join(instDir, "status-line.txt"), "[hud] ctx 0%\n", "utf8");
@@ -83,7 +80,7 @@ export function tmuxStatusCommands(grokHome = defaultGrokHome()): string[][] {
   const scopedSingle = `${instRoot}/#{session_name}/tmux-status.txt`;
   // NEVER fall back to global ~/.grok/hud/tmux-*.txt — that leaked the previous
   // Terminal's high ctx% into brand-new windows (should show 0% / idle).
-  const idleSingle = "窗 ░░░░░░░░░░ 0% · —";
+  const idleSingle = "ctx ░░░░░░░░░░ 0% · —";
   // Up to 3 status rows in the SAME terminal window
   const statusLines = Math.max(
     1,

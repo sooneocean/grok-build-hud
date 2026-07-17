@@ -1,6 +1,6 @@
 /**
  * Interactive settings UI for language / preset / rows.
- * Default language: 简体中文; switchable to English / 繁體.
+ * Default language: English; switchable to 简体中文 / 繁體.
  */
 import * as readline from "node:readline";
 import {
@@ -77,14 +77,14 @@ async function pickLanguage(
   out: (s: string) => void,
 ): Promise<HudLang> {
   const s = t(cfg.language);
-  out(`  1) ${s.langZh}`);
-  out(`  2) ${s.langZhHant}`);
-  out(`  3) ${s.langEn}`);
+  out(`  1) ${s.langEn}  (default)`);
+  out(`  2) ${s.langZh}`);
+  out(`  3) ${s.langZhHant}`);
   out(`  b) ${s.back}`);
   const ans = await ask(rl, `  ${s.choose}: `);
-  if (ans === "1" || ans === "zh" || ans === "cn") return "zh-Hans";
-  if (ans === "2" || ans === "tw" || ans === "hant") return "zh-Hant";
-  if (ans === "3" || ans === "en") return "en";
+  if (ans === "1" || ans === "en") return "en";
+  if (ans === "2" || ans === "zh" || ans === "cn") return "zh-Hans";
+  if (ans === "3" || ans === "tw" || ans === "hant") return "zh-Hant";
   return normalizeLang(cfg.language);
 }
 
@@ -152,7 +152,7 @@ export async function runSettingsUi(
 
   // Default to Chinese if somehow empty
   if (!cfg.language) {
-    cfg = { ...cfg, language: "zh-Hans" };
+    cfg = { ...cfg, language: "en" };
   }
 
   const rl = readline.createInterface({

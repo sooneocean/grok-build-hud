@@ -20,7 +20,7 @@ Grok 4.5 · AI FILM SPACE/0717 · ●
 | 活动 | 工具、agent、todos |
 | 主题 | 跟随 Grok `[ui].theme`，不锁死 |
 | 多终端 | 每个标签页**独立** session，互不串线 |
-| 语言 | 默认**简体中文**，可切英文 / 繁體 |
+| 语言 | 默认 **English**，可切简体中文 / 繁體 |
 
 仓库：http://172.238.15.154:3000/Redredchen01/grok-build-hud  
 插件名：`grok-build-hud` · 版本见 [`plugin.json`](./plugin.json)
@@ -216,8 +216,8 @@ grok-hud stop
 grok-hud settings
 
 # 快捷切语言
-grok-hud lang zh    # 简体中文（默认）
-grok-hud lang en    # English
+grok-hud lang en    # English（默认）
+grok-hud lang zh    # 简体中文
 grok-hud lang tw    # 繁體中文
 ```
 
@@ -257,7 +257,7 @@ tmux source-file ~/.grok/hud/tmux.conf && tmux refresh-client -S
 
 常用字段：
 
-- `language`：`zh-Hans`（默认）/ `en` / `zh-Hant`
+- `language`：`en`（默认）/ `zh-Hans` / `zh-Hant`
 - `bold: true` — 粗体数值
 - `barWidth: 14` — 进度条宽度  
 

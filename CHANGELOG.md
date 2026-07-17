@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.14
+
+### Config
+- **Default language is English** (`en`). Switch to 简体中文 / 繁體 via
+  `grok-hud settings` or `grok-hud lang zh` / `lang tw`.
+
 ## 0.3.13
 
 ### Fixes

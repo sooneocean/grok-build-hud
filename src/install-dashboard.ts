@@ -182,7 +182,7 @@ if-shell '[ -f "$HOME/.grok/hud/tmux.conf" ]' 'source-file ~/.grok/hud/tmux.conf
 
   // Theme: always follow Grok [ui].theme (clear legacy locks)
   ensureFollowMode(grokHome);
-  // Default language 简体中文 (user can switch in settings)
+  // Default language English (user can switch to 中文 in settings)
   ensureDefaultConfig(grokHome);
 
   // Terminal-open hook (primary lifecycle): interactive zsh → ensure daemon

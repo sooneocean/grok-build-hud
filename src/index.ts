@@ -269,13 +269,14 @@ Also:
   grok-build-hud --theme auto   # follow Grok /theme (default, not locked)
   grok-build-hud --preset full|essential|minimal
   grok-hud settings             # 设定界面（语言 中/英、预设、行数）
-  grok-hud lang zh              # 快捷：简体中文
-  grok-hud lang en              # 快捷：English
+  grok-hud lang en              # English (default)
+  grok-hud lang zh              # 简体中文
+  grok-hud lang tw              # 繁體中文
 
 Theme: always tracks Grok [ui].theme (auto → OS light/dark maps).
   Change inside Grok with /theme — HUD re-paints in ~1s.
 
-Language: default 简体中文; switch in settings or: grok-hud lang en
+Language: default English; switch in settings or: grok-hud lang zh
 
 Lifecycle: Terminal open → ready (not machine boot).
 文档: README.md（中文）· README.en.md（English）
@@ -391,7 +392,7 @@ export async function runCli(
     // keep readability defaults + user language
     cfg.bold = true;
     cfg.barWidth = Math.max(cfg.barWidth ?? 12, 12);
-    cfg.language = prev.language ?? "zh-Hans";
+    cfg.language = prev.language ?? "en";
     const saved = saveHudConfig(cfg, grokHome);
     writeTmuxConfFile(opts.grokHome);
     applyTmuxStatusBar({ grokHome: opts.grokHome });
@@ -485,7 +486,7 @@ export async function runCli(
       out(`             (plain command — auto HUD; no extra flags)`);
       out(`  theme:     follows Grok /theme (not locked)`);
       out(
-        `  language:  ${hudCfg.language}  (设定: grok-hud settings · 切英文: grok-hud lang en)`,
+        `  language:  ${hudCfg.language}  (settings: grok-hud settings · 中文: grok-hud lang zh)`,
       );
       if (r.grokWrap) {
         out(`  wrap:      ${r.grokWrap.wrapperPath}`);

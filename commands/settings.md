@@ -13,8 +13,8 @@ grok-build-hud --settings
 ## Language shortcuts
 
 ```bash
-grok-hud lang zh   # 简体中文 (default)
-grok-hud lang en   # English
+grok-hud lang en   # English (default)
+grok-hud lang zh   # 简体中文
 grok-hud lang tw   # 繁體中文
 ```
 

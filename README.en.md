@@ -20,7 +20,7 @@ ctx ██████░░░░ 50% (252k/500k) · i … o … c 99% · use 2
 | Activity | Tools, agents, todos |
 | Theme | Follows Grok `[ui].theme` (not locked) |
 | Multi-terminal | Independent session per tab |
-| Language | Default **简体中文**; English / 繁體 available |
+| Language | Default **English**; 简体中文 / 繁體 available |
 
 Repo: http://172.238.15.154:3000/Redredchen01/grok-build-hud  
 Plugin id: `grok-build-hud` · version in [`plugin.json`](./plugin.json)
@@ -154,7 +154,7 @@ scripts/install.sh       # one-shot installer
 | **essential** | 2 | Model/git + context/usage + activity |
 | **minimal** | 1 | Dense single row |
 
-`language`: `zh-Hans` (default) / `en` / `zh-Hant`
+`language`: `en` (default) / `zh-Hans` / `zh-Hant`
 
 Theme always tracks Grok `/theme` unless `GROK_HUD_LOCK=1`.
 

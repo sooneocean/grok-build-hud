@@ -1,6 +1,6 @@
 /**
  * HUD + settings UI strings.
- * Default language: zh-Hans (简体中文). Switch via settings → English.
+ * Default language: en (English). Switch via settings → 中文 / 繁體.
  */
 import type { HudDisplayConfig } from "./hud-config.js";
 
@@ -190,7 +190,7 @@ const EN: HudStrings = {
 
 export function normalizeLang(raw?: string | null): HudLang {
   const s = (raw || "").trim().toLowerCase();
-  if (!s) return "zh-Hans";
+  if (!s) return "en";
   if (s === "en" || s === "english" || s === "eng") return "en";
   if (
     s === "zh-hant" ||
@@ -216,7 +216,7 @@ export function normalizeLang(raw?: string | null): HudLang {
   ) {
     return "zh-Hans";
   }
-  return "zh-Hans";
+  return "en";
 }
 
 export function t(lang?: string | null): HudStrings {
