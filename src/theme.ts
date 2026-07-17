@@ -61,21 +61,30 @@ export const THEME_GROKNIGHT: HudTheme = {
   stale: "#7a7a7a",
 };
 
-/** GrokDay — light / 白底黑字 */
+/**
+ * GrokDay — light / paper strip.
+ * High contrast on white: never rely on terminal "dim" (washes out on light bg).
+ * Solid soft statusBg so text isn't lost against mixed terminal backgrounds.
+ */
 export const THEME_GROKDAY: HudTheme = {
   name: "grokday",
-  statusBg: "default",
-  statusFg: "#2a2a2a",
-  label: "#6b6b6b",
-  value: "#111111",
-  sep: "#c8c8c8",
-  mark: "#6C3EB2",
-  ok: "#2f7a3e",
-  warn: "#8a6a12",
-  crit: "#a03030",
-  barEmpty: "#dcdcdc",
-  live: "#6C3EB2",
-  stale: "#8a8a8a",
+  // Warm paper bar — separates HUD from Grok content, readable black on cream
+  statusBg: "#f4f1ea",
+  statusFg: "#1c1917",
+  // Labels: slate, dark enough without dim
+  label: "#57534e",
+  // Primary numbers: near-black ink
+  value: "#0c0a09",
+  // Separators: visible mid grey (not #c8c8c8 on white)
+  sep: "#a8a29e",
+  // Accent purple — deeper for WCAG-ish contrast on paper
+  mark: "#5b21b6",
+  ok: "#166534",
+  warn: "#a16207",
+  crit: "#b91c1c",
+  barEmpty: "#d6d3d1",
+  live: "#5b21b6",
+  stale: "#78716c",
 };
 
 /** Rose Pine Moon */
@@ -112,21 +121,21 @@ export const THEME_OSCURA: HudTheme = {
   stale: "#6a6a6a",
 };
 
-/** Generic light (白底) */
+/** Generic light (白底) — high contrast */
 export const THEME_CLEAR_LIGHT: HudTheme = {
   name: "light",
-  statusBg: "default",
-  statusFg: "#3c424a",
-  label: "#7a828c",
-  value: "#1a1d21",
-  sep: "#c5cad1",
-  mark: "#5a6570",
-  ok: "#3d6b55",
-  warn: "#8a6a2e",
-  crit: "#8f4040",
-  barEmpty: "#d8dce2",
-  live: "#3d6b55",
-  stale: "#9aa3ad",
+  statusBg: "#f1f5f9",
+  statusFg: "#0f172a",
+  label: "#475569",
+  value: "#020617",
+  sep: "#94a3b8",
+  mark: "#1e3a5f",
+  ok: "#15803d",
+  warn: "#a16207",
+  crit: "#b91c1c",
+  barEmpty: "#cbd5e1",
+  live: "#1d4ed8",
+  stale: "#64748b",
 };
 
 /** Generic dark */
@@ -310,12 +319,15 @@ export function detectSystemAppearance(
 }
 
 /**
- * Resolve HUD palette.
- * Priority:
- *  1. explicit CLI / GROK_HUD_THEME (if not auto)
- *  2. ~/.grok/hud/theme file (if not auto)
- *  3. Grok [ui].theme from config.toml  ← main source of truth
- *  4. if Grok theme is auto → system light/dark → auto_light/dark_theme
+ * Resolve HUD palette from Grok's theme — never lock to one palette by default.
+ *
+ * Default (follow):
+ *   ~/.grok/config.toml [ui].theme
+ *   → if "auto"/"system": OS light/dark → auto_light_theme / auto_dark_theme
+ *
+ * Optional lock (explicit only):
+ *   GROK_HUD_LOCK=1 plus CLI `--theme X` / env GROK_HUD_THEME=X
+ *   (without LOCK, file/env "auto" is ignored and we still follow Grok)
  */
 export function resolveTheme(
   name?: string | null,
@@ -324,51 +336,127 @@ export function resolveTheme(
 ): HudTheme {
   const grokHome = options.grokHome ?? path.join(os.homedir(), ".grok");
   const ui = readGrokUiConfig(grokHome);
+  const lock =
+    env.GROK_HUD_LOCK === "1" ||
+    env.GROK_HUD_LOCK === "true" ||
+    Boolean(name && name !== "auto" && name !== "system");
 
-  const override = (
-    name ||
-    env.GROK_HUD_THEME ||
-    env.GROK_BUILD_HUD_THEME ||
-    readThemeFile() ||
-    ""
-  )
-    .toString()
-    .trim()
-    .toLowerCase();
-
-  // Explicit lock to a known palette name
-  if (override && override !== "auto" && override !== "system") {
-    return paletteForGrokTheme(override);
+  // Explicit CLI name (e.g. --theme tokyonight) = temporary override for that command
+  const cliName = (name || "").toString().trim().toLowerCase();
+  if (cliName && cliName !== "auto" && cliName !== "system") {
+    const theme = paletteForGrokTheme(cliName);
+    writeAppearanceSnapshot({
+      appearance: isLightTheme(theme) ? "light" : "dark",
+      source: "cli-override",
+      grokTheme: ui.theme,
+      mappedTheme: theme.name,
+      hudPalette: theme.name,
+      follow: false,
+    });
+    return theme;
   }
 
-  // Follow Grok's active theme (what the TUI paints)
+  // Locked env/file palette only when GROK_HUD_LOCK=1
+  if (lock && !cliName) {
+    const locked = (
+      env.GROK_HUD_THEME ||
+      env.GROK_BUILD_HUD_THEME ||
+      readThemeFile() ||
+      ""
+    )
+      .toString()
+      .trim()
+      .toLowerCase();
+    if (locked && locked !== "auto" && locked !== "system") {
+      const theme = paletteForGrokTheme(locked);
+      writeAppearanceSnapshot({
+        appearance: isLightTheme(theme) ? "light" : "dark",
+        source: "locked",
+        grokTheme: ui.theme,
+        mappedTheme: theme.name,
+        hudPalette: theme.name,
+        follow: false,
+      });
+      return theme;
+    }
+  }
+
+  // ── Follow Grok [ui].theme (default path) ──
+  return resolveFromGrokUi(ui, grokHome);
+}
+
+/** Map Grok config.toml [ui] → HUD palette (live follow). */
+export function resolveFromGrokUi(
+  ui: GrokUiConfig,
+  grokHome?: string,
+): HudTheme {
   const grokTheme = normalizeGrokThemeName(ui.theme || "groknight");
   if (grokTheme === "auto") {
-    const sys = detectSystemAppearance();
-    const mapped =
+    // Poll system appearance with short TTL so OS toggle tracks quickly
+    const sys = detectSystemAppearance({ ttlMs: 1500 });
+    const mappedRaw =
       sys === "dark"
         ? ui.autoDarkTheme || "groknight"
         : ui.autoLightTheme || "grokday";
+    const mapped = normalizeGrokThemeName(mappedRaw);
     const theme = paletteForGrokTheme(mapped);
     writeAppearanceSnapshot({
       appearance: sys,
-      source: "grok-auto+" + sys,
+      source: "follow-grok-auto+" + sys,
       grokTheme: ui.theme,
+      autoDarkTheme: ui.autoDarkTheme,
+      autoLightTheme: ui.autoLightTheme,
       mappedTheme: mapped,
       hudPalette: theme.name,
+      follow: true,
+      grokHome: grokHome ?? null,
     });
     return theme;
   }
 
   const theme = paletteForGrokTheme(grokTheme);
   writeAppearanceSnapshot({
-    appearance: theme.name === "grokday" || theme.name === "light" ? "light" : "dark",
-    source: "grok-config",
+    appearance: isLightTheme(theme) ? "light" : "dark",
+    source: "follow-grok-config",
     grokTheme: ui.theme,
     mappedTheme: grokTheme,
     hudPalette: theme.name,
+    follow: true,
   });
   return theme;
+}
+
+/**
+ * Fingerprint for dashboard: any Grok theme / OS / mapping change rewrites tmux.
+ * Not just palette name — so auto light↔dark always refreshes.
+ */
+export function themeFingerprint(
+  theme: HudTheme,
+  ui?: GrokUiConfig | null,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const u = ui ?? { theme: "?", autoDarkTheme: "?", autoLightTheme: "?" };
+  const sys =
+    normalizeGrokThemeName(u.theme || "") === "auto"
+      ? detectSystemAppearance({ ttlMs: 1500 })
+      : "-";
+  return [
+    theme.name,
+    u.theme,
+    u.autoDarkTheme,
+    u.autoLightTheme,
+    sys,
+    env.GROK_HUD_LOCK || "0",
+  ].join("|");
+}
+
+/** Ensure ~/.grok/hud/theme is "auto" (follow mode). */
+export function ensureFollowMode(grokHome = path.join(os.homedir(), ".grok")): string {
+  const dir = path.join(grokHome, "hud");
+  fs.mkdirSync(dir, { recursive: true });
+  const p = path.join(dir, "theme");
+  fs.writeFileSync(p, "auto\n", "utf8");
+  return p;
 }
 
 function writeAppearanceSnapshot(data: Record<string, unknown>): void {
@@ -433,14 +521,105 @@ export function miniBar(
   return `#[${bold}fg=${fg}]${"█".repeat(filled)}#[fg=${theme.barEmpty}]${"░".repeat(empty)}#[default]`;
 }
 
-/** Tmux styled span. Values default to bold for readability. */
+export interface TmuxStyleOpts {
+  bold?: boolean;
+  /** Italics — hierarchy for labels / secondary facts */
+  italics?: boolean;
+  /** Dim — de-emphasize separators and labels */
+  dim?: boolean;
+  underscore?: boolean;
+}
+
+/** Tmux styled span. Mix bold / italics / dim for scannable hierarchy. */
 export function tmuxFg(
   color: string,
   text: string,
-  options: { bold?: boolean } = {},
+  options: TmuxStyleOpts = {},
 ): string {
-  const bold = options.bold ? "bold," : "";
-  return `#[${bold}fg=${color}]${text}#[default]`;
+  const attrs: string[] = [];
+  if (options.bold) attrs.push("bold");
+  if (options.italics) attrs.push("italics");
+  if (options.dim) attrs.push("dim");
+  if (options.underscore) attrs.push("underscore");
+  // no attributes → still set fg
+  const head = attrs.length ? attrs.join(",") + "," : "";
+  return `#[${head}fg=${color}]${text}#[default]`;
+}
+
+/** Light / paper palettes — dim attribute destroys contrast on light bg. */
+export function isLightTheme(theme: HudTheme): boolean {
+  const n = (theme.name || "").toLowerCase();
+  if (n === "grokday" || n === "light" || n === "day") return true;
+  // Heuristic: explicit light status background hex
+  const bg = (theme.statusBg || "").toLowerCase();
+  if (bg.startsWith("#")) {
+    const hex = bg.slice(1);
+    if (hex.length >= 6) {
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      // relative luminance approx
+      const L = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      return L > 0.72;
+    }
+  }
+  return false;
+}
+
+/** Semantic text roles for the HUD strip (light-safe: no dim on paper). */
+export function tmuxRole(
+  theme: HudTheme,
+  role:
+    | "label"
+    | "primary"
+    | "secondary"
+    | "accent"
+    | "muted"
+    | "ok"
+    | "warn"
+    | "crit"
+    | "live"
+    | "sep",
+  text: string,
+): string {
+  const light = isLightTheme(theme);
+  switch (role) {
+    case "label":
+      // Light: italic only (no dim). Dark: dim+italic OK.
+      return tmuxFg(theme.label, text, {
+        italics: true,
+        dim: !light,
+        bold: light, // slightly stronger labels on paper
+      });
+    case "primary":
+      return tmuxFg(theme.value, text, { bold: true });
+    case "secondary":
+      // Path / tools — italic, full ink on light (statusFg is dark)
+      return tmuxFg(theme.statusFg, text, {
+        italics: true,
+        bold: light,
+      });
+    case "accent":
+      return tmuxFg(theme.mark, text, { bold: true });
+    case "muted":
+      return tmuxFg(theme.label, text, {
+        italics: true,
+        dim: !light,
+      });
+    case "ok":
+      return tmuxFg(theme.ok, text, { bold: true });
+    case "warn":
+      return tmuxFg(theme.warn, text, { bold: true });
+    case "crit":
+      return tmuxFg(theme.crit, text, { bold: true });
+    case "live":
+      return tmuxFg(theme.live, text, { bold: true });
+    case "sep":
+      // Never dim seps on light — they vanish on white
+      return tmuxFg(theme.sep, text, { dim: !light });
+    default:
+      return tmuxFg(theme.value, text, { bold: true });
+  }
 }
 
 export function tmuxStatusChrome(theme: HudTheme = THEME_DEFAULT): {
@@ -452,15 +631,20 @@ export function tmuxStatusChrome(theme: HudTheme = THEME_DEFAULT): {
   statusLeftLength: string;
   statusPosition: string;
 } {
+  const light = isLightTheme(theme);
+  // Light: solid paper bg + dark ink. Dark: default/transparent + nobold base.
+  const statusStyle = light
+    ? `bg=${theme.statusBg},fg=${theme.statusFg},nobold`
+    : `bg=${theme.statusBg === "default" ? "default" : theme.statusBg},fg=${theme.statusFg},nobold`;
   return {
-    // bold + slightly brighter default fg for the whole strip
-    statusStyle: `bg=${theme.statusBg},fg=${theme.statusFg},bold`,
+    statusStyle,
     statusLeft: "",
     statusRightTemplate: (filePath: string) =>
       `#(cat ${filePath} 2>/dev/null)`,
     statusInterval: "1",
-    statusRightLength: "200",
-    statusLeftLength: "0",
+    // allow strip to use full client width (was 0 / cramped)
+    statusRightLength: "500",
+    statusLeftLength: "500",
     statusPosition: "bottom",
   };
 }

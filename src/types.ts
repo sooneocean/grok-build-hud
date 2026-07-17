@@ -63,6 +63,18 @@ export interface TodoItem {
   id?: string;
 }
 
+/** Per-turn or session-sum token usage from turn_completed events. */
+export interface TokenBreakdown {
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  modelCalls: number;
+  /** cachedRead / input * 100 (0–100). */
+  cacheHitPct: number;
+}
+
 export interface SessionSnapshot {
   sessionId: string;
   sessionDir: string;
@@ -90,6 +102,10 @@ export interface SessionSnapshot {
   avgTtftMs: number;
   agentName?: string;
   reasoningEffort?: string;
+  /** Last completed turn's input/output/cache (exact counts). */
+  lastTurnTokens?: TokenBreakdown | null;
+  /** Sum of turn_completed usage over the session. */
+  sessionTokens?: TokenBreakdown | null;
   tools: ToolActivityItem[];
   agents: AgentActivityItem[];
   todos: TodoItem[];

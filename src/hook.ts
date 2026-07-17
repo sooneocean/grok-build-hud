@@ -11,6 +11,7 @@ import {
   loadActiveSessions,
   loadSnapshotFromDir,
   pickBestSession,
+  pickFromActiveSessions,
 } from "./session.js";
 import { writeStatusFiles } from "./status.js";
 import { getCreditUsage } from "./billing.js";
@@ -67,20 +68,17 @@ export function resolveSessionForHook(
     }
   }
 
-  // Prefer live active session matching cwd
+  // Prefer newest live active session matching cwd (not first-in-list)
   if (cwd) {
-    const hit = pickBestSession({ grokHome, cwd });
+    const hit =
+      pickFromActiveSessions(grokHome, { cwd }) ??
+      pickBestSession({ grokHome, cwd });
     if (hit) return hit;
   }
 
-  // Any live session
-  for (const a of active) {
-    const dir = findSessionDirById(grokHome, a.session_id);
-    if (dir) {
-      const snap = loadSnapshotFromDir(dir, { active });
-      if (snap) return snap;
-    }
-  }
+  // Newest live session among active tabs
+  const fromActive = pickFromActiveSessions(grokHome);
+  if (fromActive) return fromActive;
 
   return pickBestSession({ grokHome });
 }

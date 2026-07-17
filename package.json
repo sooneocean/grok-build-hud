@@ -1,7 +1,7 @@
 {
   "name": "grok-build-hud",
-  "version": "0.3.0",
-  "description": "Claude-HUD-style live status for Grok Build: multi-line context, quota, tools, todos, git — same-window tmux strip + theme sync",
+  "version": "0.3.9",
+  "description": "Live multi-line status strip for Grok Build: context, quota, tokens, tools, todos, git — same-window tmux bar with theme sync and Chinese/English UI",
   "type": "module",
   "main": "dist/src/index.js",
   "bin": {
@@ -19,7 +19,6 @@
     ".grok-plugin/",
     "README.md",
     "README.zh-CN.md",
-    "MIGRATION-FROM-CLAUDE.md",
     "CHANGELOG.md",
     "LICENSE",
     "scripts/",
@@ -44,11 +43,11 @@
     "grok-build",
     "hud",
     "statusline",
-    "claude-hud",
     "tmux",
     "cli",
     "context",
-    "quota"
+    "quota",
+    "tokens"
   ],
   "author": "dex",
   "license": "MIT",

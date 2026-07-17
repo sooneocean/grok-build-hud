@@ -16,7 +16,7 @@ import os from "node:os";
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const fixture = path.join(root, "fixtures", "session");
 
-describe("Claude-HUD parity status", () => {
+describe("Grok HUD multi-line status", () => {
   it("formatStatusBlock has model line + context + usage lines", () => {
     const snap = loadSnapshotFromDir(fixture)!;
     const text = formatStatusBlock(
@@ -45,7 +45,7 @@ describe("Claude-HUD parity status", () => {
     const snap = loadSnapshotFromDir(fixture)!;
     // inject todos/agents for line 3
     snap.todos = [
-      { content: "Ship HUD parity", status: "in_progress" },
+      { content: "Ship HUD strip", status: "in_progress" },
       { content: "Write tests", status: "completed" },
     ];
     const lines = formatTmuxStatusLines(

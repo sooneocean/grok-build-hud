@@ -1,29 +1,34 @@
 /**
- * Claude-HUD-parity multi-line status rendering for Grok Build.
+ * Multi-line status rendering for Grok Build HUD.
  *
- * Default expanded layout (mirrors Claude HUD):
- *   [Grok 4.5] │ project git:(main*) │ ● live
- *   Context ████░░░░ 45% (224k/500k) │ Usage ██░░░░ 23% (weekly · resets 4d)
- *   ◐ read_file: x │ ✓ grep ×3 │ ▸ todos 2/5
+ * Default expanded layout:
+ *   [Grok 4.5] · project git · ●
+ *   窗/ctx ████ 45% · 入/i · 出/o · 缓/c · 额/use …
+ *   tool activity · agents · todos
  */
 import fs from "node:fs";
 import path from "node:path";
 import {
   formatDuration,
   formatTokenCount,
+  formatTokenCount as fmtTokShort,
   projectLabel,
   renderBar,
 } from "./bar.js";
 import { formatToolLine } from "./activity.js";
+import {
+  formatTokenBreakdownLine,
+} from "./token-usage.js";
 import type {
   SessionSnapshot,
   TodoItem,
+  TokenBreakdown,
   UsageSnapshot,
 } from "./types.js";
 import { defaultGrokHome } from "./session.js";
 import {
   miniBar,
-  tmuxFg,
+  tmuxRole,
   resolveTheme,
   type HudTheme,
 } from "./theme.js";
@@ -31,6 +36,17 @@ import {
   loadHudConfig,
   type HudDisplayConfig,
 } from "./hud-config.js";
+import {
+  adaptiveBarWidth,
+  adaptiveStatusLines,
+  fitSegments,
+  resolveDisplayWidth,
+  trimVisible,
+  visibleLen,
+  widthTier,
+  type FitSegment,
+} from "./layout.js";
+import { stringsFromConfig } from "./i18n.js";
 
 export function hudDataDir(grokHome = defaultGrokHome()): string {
   return path.join(grokHome, "hud");
@@ -80,7 +96,59 @@ function truncate(s: string, n: number): string {
   return s.slice(0, n - 1) + "…";
 }
 
-/** Plain multi-line Claude-HUD parity block (for files / /hud / hooks). */
+function pickTokenForDisplay(
+  session: SessionSnapshot,
+  scope: HudDisplayConfig["display"]["tokenScope"],
+): { last: TokenBreakdown | null; sessionSum: TokenBreakdown | null } {
+  const last = session.lastTurnTokens ?? null;
+  const sessionSum = session.sessionTokens ?? null;
+  if (scope === "session") return { last: null, sessionSum };
+  if (scope === "last") return { last, sessionSum: null };
+  return { last, sessionSum };
+}
+
+function tokenLinesForHud(
+  session: SessionSnapshot,
+  cfg: HudDisplayConfig,
+): string[] {
+  if (!cfg.display.showTokenBreakdown) return [];
+  const mode = cfg.display.tokenDigits ?? "exact";
+  const { last, sessionSum } = pickTokenForDisplay(
+    session,
+    cfg.display.tokenScope ?? "both",
+  );
+  const short = mode === "short" ? formatTokenCount : undefined;
+  const out: string[] = [];
+  if (last) {
+    out.push(
+      formatTokenBreakdownLine(last, {
+        mode,
+        prefix: "TOK",
+        formatShort: short,
+      }),
+    );
+  }
+  if (sessionSum && (cfg.display.tokenScope === "both" || cfg.display.tokenScope === "session")) {
+    // Avoid duplicating identical last==session when only one turn
+    const same =
+      last &&
+      last.inputTokens === sessionSum.inputTokens &&
+      last.outputTokens === sessionSum.outputTokens &&
+      last.cachedReadTokens === sessionSum.cachedReadTokens;
+    if (!same) {
+      out.push(
+        formatTokenBreakdownLine(sessionSum, {
+          mode,
+          prefix: "ΣTOK",
+          formatShort: short,
+        }),
+      );
+    }
+  }
+  return out;
+}
+
+/** Plain multi-line status block (for files / /hud / hooks). */
 export function formatStatusBlock(
   session: SessionSnapshot,
   usage?: UsageSnapshot | null,
@@ -108,7 +176,7 @@ export function formatStatusBlock(
   if (session.reasoningEffort) l1.push(`effort:${session.reasoningEffort}`);
   lines.push(l1.join(" │ "));
 
-  // Line 2 — Context + Usage (Claude default merge)
+  // Line 2 — Context + Usage
   const pct = Math.round(session.contextPercent);
   const cBar = d.showContextBar ? renderBar(session.contextPercent) + " " : "";
   const ctxPart = `Context ${cBar}${contextValueText(session, d.contextValue)}`;
@@ -139,7 +207,8 @@ export function formatStatusBlock(
     meta.push(`Tools ${session.toolCallCount}`);
   }
   if (d.showErrors && (session.errorCount > 0 || session.toolFailureCount > 0)) {
-    meta.push(`Err ${session.errorCount || session.toolFailureCount}`);
+    const Ls = stringsFromConfig(cfg);
+    meta.push(`${Ls.err} ${session.errorCount || session.toolFailureCount}`);
   }
   if (
     d.showDiffStats &&
@@ -155,10 +224,16 @@ export function formatStatusBlock(
     if (gb) meta.push(gb);
   }
 
-  const line2 = [ctxPart, usagePart, ...meta].filter(Boolean).join(" │ ");
+  const tokParts = tokenLinesForHud(session, cfg);
+  // Prefer first token line on the context/usage row for glanceability
+  const line2 = [ctxPart, tokParts[0], usagePart, ...meta]
+    .filter(Boolean)
+    .join(" │ ");
   lines.push(line2);
+  // Session sum (ΣTOK) gets its own row when present and different
+  if (tokParts[1]) lines.push(tokParts[1]);
 
-  // Line 3 — tools / agents / todos
+  // Activity — tools / agents / todos
   const activity: string[] = [];
   if (d.showToolActivity) {
     const tl = formatToolLine(session.tools);
@@ -195,120 +270,323 @@ export function formatCompactLine(
     cfg.display.showGit && session.branch
       ? ` git:(${session.branch}${session.gitDirty && cfg.display.showGitDirty ? "*" : ""})`
       : "";
-  return `[hud] [${displayModel(session.model)}] ${projectLabel(session.cwd, cfg.pathLevels)}${git} │ ctx ${pct}% │ ${q} │ t${session.turnCount} │ tools ${session.toolCallCount}`;
+  const tok = session.lastTurnTokens;
+  const tokBit =
+    cfg.display.showTokenBreakdown && tok
+      ? ` │ in ${formatTokenCount(tok.inputTokens)} out ${formatTokenCount(tok.outputTokens)} cache ${formatTokenCount(tok.cachedReadTokens)}`
+      : "";
+  return `[hud] [${displayModel(session.model)}] ${projectLabel(session.cwd, cfg.pathLevels)}${git} │ ctx ${pct}% │ ${q}${tokBit} │ t${session.turnCount} │ tools ${session.toolCallCount}`;
 }
 
 /**
- * Multi-line tmux status content (colour-coded).
- * Written as separate lines for status-format[0..n].
+ * Compact token cluster with mixed styles (not one big bold blob).
+ * label italic/dim · number bold (colour by kind)
+ */
+function formatTokenCluster(
+  session: SessionSnapshot,
+  theme: HudTheme,
+  cfg: HudDisplayConfig,
+  tier: ReturnType<typeof widthTierLike>,
+): { plain: string; render: string } | null {
+  if (!cfg.display.showTokenBreakdown) return null;
+  const tok = session.lastTurnTokens;
+  if (!tok) return null;
+  const L = stringsFromConfig(cfg);
+  const exact = cfg.display.tokenDigits === "exact" && tier !== "xs" && tier !== "sm";
+  const n = (x: number) => (exact ? x.toLocaleString("en-US") : fmtTokShort(x));
+  const hit = Math.round(tok.cacheHitPct);
+  // short labels from i18n: 入/出/缓 or i/o/c
+  const partsPlain = [
+    `${L.in} ${n(tok.inputTokens)}`,
+    `${L.out} ${n(tok.outputTokens)}`,
+    `${L.cache} ${n(tok.cachedReadTokens)}${hit ? ` ${hit}%` : ""}`,
+  ];
+  if (tok.reasoningTokens > 0 && (tier === "md" || tier === "lg")) {
+    partsPlain.push(`${L.reason} ${n(tok.reasoningTokens)}`);
+  }
+  const plain = partsPlain.join(" ");
+  const render =
+    tmuxRole(theme, "label", `${L.in} `) +
+    tmuxRole(theme, "primary", n(tok.inputTokens)) +
+    tmuxRole(theme, "sep", "  ") +
+    tmuxRole(theme, "label", `${L.out} `) +
+    tmuxRole(theme, "secondary", n(tok.outputTokens)) +
+    tmuxRole(theme, "sep", "  ") +
+    tmuxRole(theme, "label", `${L.cache} `) +
+    tmuxRole(theme, hit >= 90 ? "ok" : "warn", n(tok.cachedReadTokens)) +
+    (hit
+      ? tmuxRole(theme, "muted", ` ${hit}%`)
+      : "") +
+    (tok.reasoningTokens > 0 && (tier === "md" || tier === "lg")
+      ? tmuxRole(theme, "sep", "  ") +
+        tmuxRole(theme, "label", `${L.reason} `) +
+        tmuxRole(theme, "secondary", n(tok.reasoningTokens))
+      : "");
+  return { plain, render };
+}
+
+function widthTierLike(cols: number): "xs" | "sm" | "md" | "lg" {
+  return widthTier(cols);
+}
+
+/**
+ * Multi-line tmux status — width-adaptive + typographic hierarchy.
+ * Labels: dim italic · primary numbers: bold · secondary: italic · seps: dim
  */
 export function formatTmuxStatusLines(
   session: SessionSnapshot,
   usage?: UsageSnapshot | null,
   theme: HudTheme = resolveTheme(),
   cfg: HudDisplayConfig = loadHudConfig(),
+  options: { maxWidth?: number } = {},
 ): string[] {
   const d = cfg.display;
-  const bold = cfg.bold !== false;
-  const barW = cfg.barWidth && cfg.barWidth > 0 ? cfg.barWidth : 12;
-  // wider separators + bold values = easier to scan at a glance
-  const sep = tmuxFg(theme.sep, "  │  ", { bold: false });
-  const label = (s: string) => tmuxFg(theme.label, s, { bold: false });
-  const value = (s: string) => tmuxFg(theme.value, s, { bold });
-  const accent = (s: string) => tmuxFg(theme.mark, s, { bold });
-  const lines: string[] = [];
+  const L = stringsFromConfig(cfg);
+  const cols = options.maxWidth && options.maxWidth > 20 ? options.maxWidth : 100;
+  const tier = widthTier(cols);
+  const barW = adaptiveBarWidth(
+    cols,
+    cfg.barWidth && cfg.barWidth > 0 ? cfg.barWidth : 12,
+  );
+  const rows = adaptiveStatusLines(cols, cfg.statusLines ?? 3);
+  // leave 2 cols margin for tmux chrome
+  const maxW = Math.max(24, cols - 2);
+  const sepR = tmuxRole(theme, "sep", " · ");
+  const sepP = " · ";
 
-  // L0 model + project + git + live
-  const l0: string[] = [];
+  // ── Line 0: model (bold) · project (italic) · live (bold accent)
+  const l0: FitSegment[] = [];
   if (d.showModel) {
-    l0.push(accent(`[${displayModel(session.model)}]`));
+    const t = displayModel(session.model);
+    l0.push({
+      text: t,
+      render: tmuxRole(theme, "accent", t),
+      priority: 0,
+    });
   }
   if (d.showProject) {
-    let p = value(projectLabel(session.cwd, cfg.pathLevels));
+    let plain = projectLabel(session.cwd, cfg.pathLevels);
     if (d.showGit && session.branch) {
       const dirty = d.showGitDirty && session.gitDirty ? "*" : "";
-      p +=
-        tmuxFg(theme.label, "  git:(", { bold: false }) +
-        value(`${session.branch}${dirty}`) +
-        tmuxFg(theme.label, ")", { bold: false });
+      plain += ` ${session.branch}${dirty}`;
     }
-    l0.push(p);
+    // short path on narrow
+    const shown =
+      tier === "xs" ? plain.split("/").pop() || plain : plain;
+    l0.push({
+      text: shown,
+      render: tmuxRole(theme, "secondary", shown),
+      priority: 2,
+    });
   }
   if (d.showLive) {
-    l0.push(
-      session.live
-        ? tmuxFg(theme.live, " ● LIVE ", { bold: true })
-        : tmuxFg(theme.stale, " ○ stale ", { bold: false }),
-    );
+    const t = session.live ? "●" : "○";
+    l0.push({
+      text: t,
+      render: session.live
+        ? tmuxRole(theme, "live", t)
+        : tmuxRole(theme, "muted", t),
+      priority: 1,
+    });
   }
-  // Extra leading/trailing spaces = more breathing room (reads larger)
-  lines.push("   " + l0.join(sep) + "   ");
+  if (d.showTitle && session.title && tier === "lg") {
+    const t = truncate(session.title, 28);
+    l0.push({
+      text: t,
+      render: tmuxRole(theme, "muted", t),
+      priority: 5,
+    });
+  }
+  if (session.reasoningEffort && (tier === "md" || tier === "lg")) {
+    const t = session.reasoningEffort;
+    l0.push({
+      text: t,
+      render: tmuxRole(theme, "label", t),
+      priority: 6,
+    });
+  }
 
-  // L1 context + usage — thicker bars, bold percentages
+  const line0 = fitSegments(l0, maxW, sepP, sepR);
+
+  // ── Line 1: ctx bar + % · tokens · use · meta (priority drop)
   const pct = Math.round(session.contextPercent);
-  const ctx =
-    label("CTX ") +
-    (d.showContextBar ? miniBar(pct, barW, theme, { bold }) + " " : "") +
-    value(contextValueText(session, d.contextValue));
+  const l1: FitSegment[] = [];
 
-  let usagePart = label("USE ") + value("—");
+  {
+    const bar = d.showContextBar
+      ? miniBar(pct, barW, theme, { bold: true }) + " "
+      : "";
+    const val =
+      tier === "xs" || tier === "sm"
+        ? `${pct}%`
+        : contextValueText(session, d.contextValue);
+    const plain = `${L.ctx} ${val}`;
+    const render =
+      tmuxRole(theme, "label", `${L.ctx} `) +
+      bar +
+      tmuxRole(
+        theme,
+        pct >= 90 ? "crit" : pct >= 70 ? "warn" : "ok",
+        val,
+      );
+    l1.push({ text: plain, render, priority: 0 });
+  }
+
+  const cluster = formatTokenCluster(session, theme, cfg, tier);
+  if (cluster && tier !== "xs") {
+    l1.push({
+      text: cluster.plain,
+      render: cluster.render,
+      priority: tier === "sm" ? 3 : 1,
+    });
+  }
+
   if (d.showUsage && usage?.available && usage.percent != null) {
     const q = Math.round(usage.percent);
-    usagePart =
-      label("USE ") +
-      (d.showContextBar ? miniBar(q, barW, theme, { bold }) + " " : "") +
-      value(
-        `${q}%${usage.period ? ` ${usage.period}` : ""}${usage.resetsIn ? ` · ${usage.resetsIn}` : ""}`,
-      );
+    const bar = d.showContextBar
+      ? miniBar(q, Math.max(6, barW - 2), theme, { bold: true }) + " "
+      : "";
+    const periodWord =
+      usage.period === "weekly"
+        ? L.weekly
+        : usage.period === "monthly"
+          ? L.monthly
+          : usage.period ?? "";
+    const tail =
+      tier === "lg" && usage.resetsIn
+        ? ` ${periodWord} ${usage.resetsIn}`.trim()
+        : "";
+    const plain = `${L.use} ${q}%${tail ? " " + tail : ""}`;
+    const render =
+      tmuxRole(theme, "label", `${L.use} `) +
+      bar +
+      tmuxRole(theme, "primary", `${q}%`) +
+      (tail ? tmuxRole(theme, "muted", ` ${tail}`) : "");
+    l1.push({ text: plain, render, priority: 2 });
   }
-  const meta: string[] = [];
-  if (d.showSessionTime && session.durationSeconds > 0) {
-    meta.push(label("TIME ") + value(formatDuration(session.durationSeconds)));
+
+  if (d.showTurns && session.turnCount > 0 && tier !== "xs") {
+    l1.push({
+      text: `${L.turn}${session.turnCount}`,
+      render:
+        tmuxRole(theme, "label", L.turn) +
+        tmuxRole(theme, "primary", String(session.turnCount)),
+      priority: 4,
+    });
   }
-  if (d.showTurns) meta.push(label("T ") + value(String(session.turnCount)));
-  if (d.showTools)
-    meta.push(label("TOOLS ") + value(String(session.toolCallCount)));
-  if (d.showErrors && session.toolFailureCount > 0) {
-    meta.push(tmuxFg(theme.crit, ` ERR ${session.toolFailureCount} `, { bold: true }));
+  if (d.showTools && session.toolCallCount > 0 && (tier === "md" || tier === "lg")) {
+    l1.push({
+      text: `${L.tools}${session.toolCallCount}`,
+      render:
+        tmuxRole(theme, "label", L.tools) +
+        tmuxRole(theme, "secondary", String(session.toolCallCount)),
+      priority: 5,
+    });
+  }
+  if (d.showSessionTime && session.durationSeconds > 0 && tier === "lg") {
+    const t = formatDuration(session.durationSeconds);
+    l1.push({
+      text: t,
+      render: tmuxRole(theme, "muted", t),
+      priority: 7,
+    });
   }
   if (
-    d.showDiffStats &&
-    (session.agentLinesAdded || session.agentLinesRemoved)
+    d.showErrors &&
+    (session.errorCount > 0 || session.toolFailureCount > 0)
   ) {
-    meta.push(
-      value(`+${session.agentLinesAdded}/-${session.agentLinesRemoved}`),
-    );
+    const n = session.errorCount || session.toolFailureCount;
+    l1.push({
+      text: `!${n}`,
+      render: tmuxRole(theme, "crit", `!${n}`),
+      priority: 1,
+    });
   }
-  lines.push("   " + [ctx, usagePart, ...meta].join(sep) + "   ");
 
-  // L2 activity
-  if (cfg.statusLines >= 3) {
-    const bits: string[] = [];
+  const line1 = fitSegments(l1, maxW, sepP, sepR);
+
+  // Single-row windows: merge identity + metrics into one fitted line
+  if (rows === 1) {
+    const merged = fitSegments(
+      [
+        ...l0,
+        ...l1.filter((s) => s.priority <= 2),
+      ],
+      maxW,
+      sepP,
+      sepR,
+    );
+    return [visibleLen(merged) > maxW ? trimVisible(merged, maxW) : merged];
+  }
+
+  const lines: string[] = [line0, line1];
+
+  // ── Line 2: activity (italic) — secondary tools muted
+  if (rows >= 3) {
+    const bits: FitSegment[] = [];
+    // Σ only on large screens (avoid repeating full token wall)
+    if (
+      d.showTokenBreakdown &&
+      tier === "lg" &&
+      cfg.display.tokenScope === "both"
+    ) {
+      const sum = session.sessionTokens;
+      const last = session.lastTurnTokens;
+      if (
+        sum &&
+        last &&
+        (sum.inputTokens !== last.inputTokens ||
+          sum.outputTokens !== last.outputTokens)
+      ) {
+        const t = `${L.sum} ${L.in} ${fmtTokShort(sum.inputTokens)} ${L.out} ${fmtTokShort(sum.outputTokens)} ${L.cache} ${fmtTokShort(sum.cachedReadTokens)}`;
+        bits.push({
+          text: t,
+          render: tmuxRole(theme, "muted", t),
+          priority: 4,
+        });
+      }
+    }
     if (d.showToolActivity) {
       const tl = formatToolLine(session.tools);
-      if (tl) bits.push(value(tl));
+      if (tl) {
+        // only first tool chunk bold; rest already in formatToolLine — soften whole as secondary
+        const short = truncate(tl, tier === "sm" ? 36 : tier === "md" ? 56 : 80);
+        bits.push({
+          text: short,
+          render: tmuxRole(theme, "secondary", short),
+          priority: 2,
+        });
+      }
     }
     if (d.showAgents) {
       const al = formatAgentsLine(session);
-      if (al) bits.push(label(al));
+      if (al) {
+        bits.push({
+          text: al,
+          render: tmuxRole(theme, "label", truncate(al, 40)),
+          priority: 5,
+        });
+      }
     }
     if (d.showTodos) {
       const td = formatTodosLine(session.todos);
-      if (td) bits.push(accent(td));
+      if (td) {
+        bits.push({
+          text: td,
+          render: tmuxRole(theme, "accent", truncate(td, 36)),
+          priority: 3,
+        });
+      }
     }
-    if (d.showProductBreakdown && usage?.message) {
-      const gb = usage.message
-        .split(",")
-        .map((s) => s.trim())
-        .find((s) => /GrokBuild/i.test(s));
-      if (gb) bits.push(label(gb));
+    if (bits.length) {
+      lines.push(fitSegments(bits, maxW, sepP, sepR));
     }
-    if (bits.length)
-      lines.push("   " + bits.join(tmuxFg(theme.sep, "   ·   ", { bold: false })) + "   ");
   }
 
-  const n = Math.max(1, Math.min(3, cfg.statusLines));
-  return lines.slice(0, n);
+  // Final safety trim each line to window
+  return lines.map((ln) =>
+    visibleLen(ln) > maxW ? trimVisible(ln, maxW) : ln,
+  );
 }
 
 /** Single-line coloured status (fallback / compact). */
@@ -317,39 +595,22 @@ export function formatTmuxStatusLine(
   usage?: UsageSnapshot | null,
   theme: HudTheme = resolveTheme(),
   cfg: HudDisplayConfig = loadHudConfig(),
+  options: { maxWidth?: number } = {},
 ): string {
-  if (cfg.lineLayout === "compact" || cfg.statusLines === 1) {
-    const lines = formatTmuxStatusLines(session, usage, theme, {
+  const lines = formatTmuxStatusLines(
+    session,
+    usage,
+    theme,
+    {
       ...cfg,
-      statusLines: 1,
-    });
-    // collapse expanded L0+L1 into one dense line for single-row mode
-    const pct = Math.round(session.contextPercent);
-    const q =
-      usage?.available && usage.percent != null
-        ? Math.round(usage.percent)
-        : null;
-    const barW = cfg.barWidth && cfg.barWidth > 0 ? cfg.barWidth : 12;
-    const bold = cfg.bold !== false;
-    const sep = tmuxFg(theme.sep, "  ·  ", { bold: false });
-    const label = (s: string) => tmuxFg(theme.label, s, { bold: false });
-    const value = (s: string) => tmuxFg(theme.value, s, { bold });
-    const parts = [
-      tmuxFg(theme.mark, `[${displayModel(session.model)}]`, { bold: true }),
-      value(projectLabel(session.cwd, cfg.pathLevels)),
-      label("CTX ") + miniBar(pct, barW, theme, { bold }) + " " + value(`${pct}%`),
-      q != null
-        ? label("USE ") + miniBar(q, barW, theme, { bold }) + " " + value(`${q}%`)
-        : label("USE ") + value("—"),
-      label("T ") + value(String(session.turnCount)),
-      label("TOOLS ") + value(String(session.toolCallCount)),
-      session.live
-        ? tmuxFg(theme.live, "● LIVE", { bold: true })
-        : tmuxFg(theme.stale, "○", { bold: false }),
-    ];
-    return "   " + parts.join(sep) + "   ";
-  }
-  return formatTmuxStatusLines(session, usage, theme, cfg).join("\n");
+      statusLines:
+        cfg.lineLayout === "compact" || cfg.statusLines === 1
+          ? 1
+          : cfg.statusLines,
+    },
+    options,
+  );
+  return lines.join("\n");
 }
 
 export interface WriteStatusResult {
@@ -365,16 +626,35 @@ export function writeStatusFiles(
   session: SessionSnapshot,
   usage?: UsageSnapshot | null,
   grokHome = defaultGrokHome(),
+  options: {
+    /** Also write under hud/tmux/<name>/ for parallel Terminal isolation. */
+    tmuxSession?: string | null;
+    /** When false, skip global status.* (only instance dir). Default true. */
+    writeGlobal?: boolean;
+    /** Terminal/tmux client width for adaptive layout. */
+    maxWidth?: number;
+    ttyPath?: string | null;
+  } = {},
 ): WriteStatusResult {
   const cfg = loadHudConfig(grokHome);
   const theme = resolveTheme(undefined, process.env, { grokHome });
   const dir = hudDataDir(grokHome);
   fs.mkdirSync(dir, { recursive: true });
 
+  const maxWidth =
+    options.maxWidth ??
+    resolveDisplayWidth({
+      ttyPath: options.ttyPath,
+      tmuxSession: options.tmuxSession,
+      fallback: 100,
+    });
+
   const compact = formatCompactLine(session, usage, cfg);
   const full = formatStatusBlock(session, usage, cfg);
-  const tmuxLines = formatTmuxStatusLines(session, usage, theme, cfg);
-  const single = formatTmuxStatusLine(session, usage, theme, cfg);
+  const tmuxLines = formatTmuxStatusLines(session, usage, theme, cfg, {
+    maxWidth,
+  });
+  const single = formatTmuxStatusLine(session, usage, theme, cfg, { maxWidth });
 
   const compactPath = path.join(dir, "status-line.txt");
   const fullPath = path.join(dir, "status.txt");
@@ -382,45 +662,62 @@ export function writeStatusFiles(
   const tmuxPath = path.join(dir, "tmux-status.txt");
   const tmuxLinesPath = path.join(dir, "tmux-lines.txt");
 
-  fs.writeFileSync(compactPath, compact + "\n", "utf8");
-  fs.writeFileSync(fullPath, full + "\n", "utf8");
-  fs.writeFileSync(tmuxPath, single + "\n", "utf8");
   // pad to 3 lines for stable sed -n
   const padded = [...tmuxLines];
   while (padded.length < 3) padded.push("");
-  fs.writeFileSync(tmuxLinesPath, padded.join("\n") + "\n", "utf8");
 
-  fs.writeFileSync(
-    jsonPath,
-    JSON.stringify(
-      {
-        updatedAt: new Date().toISOString(),
-        sessionId: session.sessionId,
-        model: session.model,
-        cwd: session.cwd,
-        live: session.live,
-        contextPercent: session.contextPercent,
-        contextTokensUsed: session.contextTokensUsed,
-        contextWindowTokens: session.contextWindowTokens,
-        turnCount: session.turnCount,
-        toolCallCount: session.toolCallCount,
-        toolFailureCount: session.toolFailureCount,
-        agentLinesAdded: session.agentLinesAdded,
-        agentLinesRemoved: session.agentLinesRemoved,
-        todos: session.todos,
-        tools: session.tools,
-        agents: session.agents,
-        usage: usage ?? null,
-        preset: cfg.preset,
-        compact,
-        full,
-        tmuxLines,
-      },
-      null,
-      2,
-    ),
-    "utf8",
-  );
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    sessionId: session.sessionId,
+    model: session.model,
+    cwd: session.cwd,
+    live: session.live,
+    contextPercent: session.contextPercent,
+    contextTokensUsed: session.contextTokensUsed,
+    contextWindowTokens: session.contextWindowTokens,
+    turnCount: session.turnCount,
+    toolCallCount: session.toolCallCount,
+    toolFailureCount: session.toolFailureCount,
+    agentLinesAdded: session.agentLinesAdded,
+    agentLinesRemoved: session.agentLinesRemoved,
+    lastTurnTokens: session.lastTurnTokens ?? null,
+    sessionTokens: session.sessionTokens ?? null,
+    tmuxSession: options.tmuxSession ?? null,
+    displayWidth: maxWidth,
+    todos: session.todos,
+    tools: session.tools,
+    agents: session.agents,
+    usage: usage ?? null,
+    preset: cfg.preset,
+    compact,
+    full,
+    tmuxLines,
+  };
+
+  const writeBundle = (targetDir: string) => {
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.writeFileSync(path.join(targetDir, "status-line.txt"), compact + "\n", "utf8");
+    fs.writeFileSync(path.join(targetDir, "status.txt"), full + "\n", "utf8");
+    fs.writeFileSync(path.join(targetDir, "tmux-status.txt"), single + "\n", "utf8");
+    fs.writeFileSync(path.join(targetDir, "tmux-lines.txt"), padded.join("\n") + "\n", "utf8");
+    fs.writeFileSync(
+      path.join(targetDir, "status.json"),
+      JSON.stringify(payload, null, 2),
+      "utf8",
+    );
+  };
+
+  if (options.writeGlobal !== false) {
+    writeBundle(dir);
+  }
+
+  // Per-tmux-session copy (parallel Terminals — independent bars)
+  if (options.tmuxSession) {
+    const safe = options.tmuxSession.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 60);
+    if (safe) {
+      writeBundle(path.join(dir, "tmux", safe));
+    }
+  }
 
   return {
     dir,

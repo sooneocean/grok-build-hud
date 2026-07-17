@@ -261,7 +261,7 @@ function summarizeRawInput(raw: unknown): string | undefined {
   return undefined;
 }
 
-/** Format tool line like Claude HUD: ◐ Edit: x | ✓ Read ×3 */
+/** Format tool activity line: ◐ tool · ✓ tool ×3 */
 export function formatToolLine(tools: ToolActivityItem[]): string {
   if (!tools.length) return "";
   const parts: string[] = [];

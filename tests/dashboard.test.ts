@@ -62,6 +62,81 @@ describe("dashboard", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
+  it("after /new: prefers newest active session, not first-listed old 78%", async () => {
+    // Repro: active_sessions keeps old tab first; new tab second with low/no signals.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hud-new-"));
+    const cwd = "/Users/dex/AI FILM SPACE/0717";
+    const oldId = "old-session-78pct";
+    const newId = "new-session-after-new";
+    const enc = encodeURIComponent(cwd);
+    const oldDir = path.join(tmp, "sessions", enc, oldId);
+    const newDir = path.join(tmp, "sessions", enc, newId);
+    fs.mkdirSync(oldDir, { recursive: true });
+    fs.mkdirSync(newDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(oldDir, "signals.json"),
+      JSON.stringify({
+        contextWindowUsage: 78,
+        contextTokensUsed: 392180,
+        contextWindowTokens: 500000,
+        turnCount: 18,
+        toolCallCount: 344,
+        primaryModelId: "grok-4.5",
+      }),
+    );
+    fs.writeFileSync(
+      path.join(oldDir, "summary.json"),
+      JSON.stringify({
+        info: { id: oldId, cwd },
+        last_active_at: "2026-07-17T06:00:00.000Z",
+        updated_at: "2026-07-17T06:00:00.000Z",
+        current_model_id: "grok-4.5",
+      }),
+    );
+    // New session often has summary+updates before signals.json exists
+    fs.writeFileSync(
+      path.join(newDir, "summary.json"),
+      JSON.stringify({
+        info: { id: newId, cwd },
+        last_active_at: "2026-07-17T07:43:00.000Z",
+        updated_at: "2026-07-17T07:43:00.000Z",
+        created_at: "2026-07-17T07:43:00.000Z",
+        current_model_id: "grok-4.5",
+      }),
+    );
+    fs.writeFileSync(path.join(newDir, "updates.jsonl"), "");
+    // active list: OLD first (insertion order) — bug used to pick this always
+    fs.writeFileSync(
+      path.join(tmp, "active_sessions.json"),
+      JSON.stringify([
+        {
+          session_id: oldId,
+          pid: process.pid,
+          cwd,
+          opened_at: "2026-07-17T04:00:00.000Z",
+        },
+        {
+          session_id: newId,
+          pid: process.pid,
+          cwd,
+          opened_at: "2026-07-17T07:43:00.000Z",
+        },
+      ]),
+    );
+
+    const r = await refreshDashboard({ grokHome: tmp, noUsage: true });
+    assert.ok(r.session);
+    assert.equal(r.session!.sessionId, newId);
+    assert.ok(
+      Math.round(r.session!.contextPercent) < 10,
+      `expected low ctx after /new, got ${r.session!.contextPercent}`,
+    );
+    assert.doesNotMatch(r.title, /78%/);
+
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
   it("runDashboardLoop respects maxIterations", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hud-loop-"));
     const sid = "fixture-session-001";

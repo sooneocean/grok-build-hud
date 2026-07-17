@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { contextPercentFromSignals } from "./bar.js";
 import { parseUpdatesFile } from "./activity.js";
+import { parseTokenUsageFile } from "./token-usage.js";
 import { readGitInfo } from "./git.js";
 import type {
   ActiveSessionEntry,
@@ -83,6 +84,90 @@ export function mtimeMs(filePath: string): number {
   }
 }
 
+/** Parse ISO timestamps; invalid → 0. */
+export function parseTimeMs(value?: string | null): number {
+  if (!value) return 0;
+  const t = Date.parse(value);
+  return Number.isFinite(t) ? t : 0;
+}
+
+/**
+ * Recency score for picking "the session you are actually in".
+ * After /new, both old and new Grok processes can stay live; array order in
+ * active_sessions.json is insertion order (oldest first), so we must rank by
+ * activity — not by list position.
+ */
+export function sessionRecencyMs(
+  session: SessionSnapshot,
+  activeEntry?: ActiveSessionEntry,
+): number {
+  const opened = parseTimeMs(activeEntry?.opened_at);
+  const lastActive = parseTimeMs(session.summary?.last_active_at);
+  const updated = parseTimeMs(session.summary?.updated_at);
+  const created = parseTimeMs(session.summary?.created_at);
+  const fileM = Math.max(
+    mtimeMs(path.join(session.sessionDir, "signals.json")),
+    mtimeMs(path.join(session.sessionDir, "summary.json")),
+    mtimeMs(path.join(session.sessionDir, "updates.jsonl")),
+    mtimeMs(path.join(session.sessionDir, "chat_history.jsonl")),
+  );
+  return Math.max(opened, lastActive, updated, created, fileM);
+}
+
+/** live first, then most recently active. */
+export function compareSessionsByRecency(
+  a: SessionSnapshot,
+  b: SessionSnapshot,
+  active: ActiveSessionEntry[] = [],
+): number {
+  if (a.live !== b.live) return a.live ? -1 : 1;
+  const ae = active.find((x) => x.session_id === a.sessionId);
+  const be = active.find((x) => x.session_id === b.sessionId);
+  return sessionRecencyMs(b, be) - sessionRecencyMs(a, ae);
+}
+
+export function sortSessionsByRecency(
+  sessions: SessionSnapshot[],
+  active: ActiveSessionEntry[] = [],
+): SessionSnapshot[] {
+  return [...sessions].sort((a, b) => compareSessionsByRecency(a, b, active));
+}
+
+/**
+ * Prefer the newest live session among active_sessions.
+ * Fixes HUD stuck on an older tab's ctx% after the user runs /new.
+ */
+export function pickFromActiveSessions(
+  grokHome: string,
+  options: { cwd?: string; preferLive?: boolean } = {},
+): SessionSnapshot | null {
+  const active = loadActiveSessions(grokHome);
+  if (!active.length) return null;
+
+  const snaps: SessionSnapshot[] = [];
+  for (const a of active) {
+    const dir = findSessionDirById(grokHome, a.session_id);
+    if (!dir) continue;
+    if (options.cwd && a.cwd && !pathsEqual(a.cwd, options.cwd)) {
+      // still allow load if summary cwd matches later
+    }
+    const snap = loadSnapshotFromDir(dir, { active });
+    if (!snap) continue;
+    if (options.cwd && snap.cwd && !pathsEqual(snap.cwd, options.cwd)) {
+      if (!(a.cwd && pathsEqual(a.cwd, options.cwd))) continue;
+    }
+    snaps.push(snap);
+  }
+  if (!snaps.length) return null;
+
+  const ranked = sortSessionsByRecency(snaps, active);
+  if (options.preferLive !== false) {
+    const live = ranked.find((s) => s.live);
+    if (live) return live;
+  }
+  return ranked[0] ?? null;
+}
+
 export function loadSnapshotFromDir(
   sessionDir: string,
   options: {
@@ -131,7 +216,9 @@ export function loadSnapshotFromDir(
       ? signals.contextWindowTokens
       : 0;
 
-  const activity = parseUpdatesFile(path.join(sessionDir, "updates.jsonl"));
+  const updatesPath = path.join(sessionDir, "updates.jsonl");
+  const activity = parseUpdatesFile(updatesPath);
+  const tokenUsage = parseTokenUsageFile(updatesPath);
   // Fallback: toolsUsed from signals when updates empty
   let tools = activity.tools;
   if (!tools.length && Array.isArray(signals.toolsUsed) && signals.toolsUsed.length) {
@@ -191,6 +278,9 @@ export function loadSnapshotFromDir(
       typeof summary?.reasoning_effort === "string"
         ? summary.reasoning_effort
         : undefined,
+    lastTurnTokens: tokenUsage.lastTurn,
+    sessionTokens:
+      tokenUsage.turnCount > 0 ? tokenUsage.session : null,
     tools,
     agents: activity.agents,
     todos: activity.todos ?? [],
@@ -259,21 +349,9 @@ export function discoverSessions(options: DiscoverOptions = {}): SessionSnapshot
     }
   }
 
-  // Sort: live first, then by signals/summary mtime
-  filtered.sort((a, b) => {
-    if (a.live !== b.live) return a.live ? -1 : 1;
-    const am = Math.max(
-      mtimeMs(path.join(a.sessionDir, "signals.json")),
-      mtimeMs(path.join(a.sessionDir, "summary.json")),
-    );
-    const bm = Math.max(
-      mtimeMs(path.join(b.sessionDir, "signals.json")),
-      mtimeMs(path.join(b.sessionDir, "summary.json")),
-    );
-    return bm - am;
-  });
-
-  return filtered;
+  // Sort: live first, then by recency (opened_at / last_active / file mtimes)
+  // Do NOT use active_sessions array order — after /new the old tab stays first.
+  return sortSessionsByRecency(filtered, active);
 }
 
 export function pickBestSession(options: DiscoverOptions = {}): SessionSnapshot | null {

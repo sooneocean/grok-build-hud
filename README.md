@@ -1,20 +1,18 @@
 # grok-build-hud
 
-**Claude-HUD-style live status for [Grok Build](https://x.ai/cli).**
+**Live multi-line status strip for [Grok Build](https://x.ai/cli).**
 
 > 中文安装与使用说明：[README.zh-CN.md](./README.zh-CN.md)
 
 Always-on strip in the **same Terminal window** (tmux status — not a second window):
 
 ```text
-[Grok 4.5] │ my-project git:(main*) │ ● LIVE
-CTX ██████████░░░░ 70% (351k/500k) │ USE ███░░░░░░░░░░░ 23% weekly · 4d │ TIME 1h │ T 16 │ TOOLS 299
-◐ read_file… | ✓ grep ×3 | ▸ Ship HUD (2/5)
+[Grok 4.5] · my-project git:(main*) · ●
+窗/ctx ██████████░░░░ 70% (351k/500k) · 入/i · 出/o · 缓/c · 额/use 23% · 轮/t 16
+◐ read_file… · ✓ grep ×3 · ▸ todos
 ```
 
-Built for Claude Code users who already know **context bar + usage bar + tools/todos** — same glances on Grok.
-
-> Grok has no native statusline API. This is the supported equivalent: a multi-line status strip + optional scrollback annotations.
+Built for Grok Build sessions: context window, quota, **input/output/cache tokens**, tools, todos, git — with Chinese/English UI and theme follow.
 
 ---
 
@@ -83,11 +81,12 @@ Then `source ~/.zshrc` and verify: `which grok-hud-run`.
 
 ```bash
 # Start Grok with the multi-line HUD at the bottom of THIS tab
-grok-hud-run
+grok
+# (or: grok-hud-run)
 ```
 
-| Row | Content (Claude HUD analogue) |
-|-----|--------------------------------|
+| Row | Content |
+|-----|---------|
 | 1 | Model · project · git · live · title · effort |
 | 2 | **Context** bar + tokens · **Usage/quota** · time · turns · tools · errors · diff |
 | 3 | Tool activity · agents · todos · GrokBuild product share |
@@ -121,7 +120,7 @@ tmux source-file ~/.grok/hud/tmux.conf && tmux refresh-client -S
 
 | Preset | Rows | Contents |
 |--------|------|----------|
-| **full** (default) | 3 | Everything (Claude “Full”) |
+| **full** (default) | 3 | Everything |
 | **essential** | 2 | Model/git + context/usage + activity |
 | **minimal** | 1 | Dense single row |
 
@@ -191,17 +190,13 @@ No second window. No cloud upload of your code by this tool (read-only local ses
 
 ---
 
-## Migrating from Claude HUD
+## Settings (language)
 
-See **[MIGRATION-FROM-CLAUDE.md](./MIGRATION-FROM-CLAUDE.md)** for option-by-option mapping.
-
-| Claude HUD | Grok Build HUD |
-|------------|----------------|
-| Statusline under prompt | Same-window tmux multi-line strip |
-| Full / Essential / Minimal | `--preset full\|essential\|minimal` |
-| Context + Usage bars | Same layout on line 2 |
-| Tools / agents / todos | Line 3 |
-| `/claude-hud:setup` | `--install-dashboard` + `grok-hud-run` |
+```bash
+grok-hud settings          # interactive UI
+grok-hud lang zh           # 简体中文 (default)
+grok-hud lang en           # English
+```
 
 ---
 

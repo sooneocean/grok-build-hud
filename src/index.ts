@@ -6,6 +6,8 @@ import {
   findSessionDirById,
   loadActiveSessions,
   loadSnapshotFromDir,
+  pickFromActiveSessions,
+  sortSessionsByRecency,
 } from "./session.js";
 import { getCreditUsage, unavailableUsage } from "./billing.js";
 import { renderHud, renderJson } from "./render.js";
@@ -37,15 +39,19 @@ import {
   resolveThemeMode,
   readGrokUiConfig,
   clearAppearanceCache,
+  ensureFollowMode,
+  themeFingerprint,
 } from "./theme.js";
 import {
   applyPreset,
   saveHudConfig,
   loadHudConfig,
+  ensureDefaultConfig,
   type HudPreset,
 } from "./hud-config.js";
 import type { SessionSnapshot, UsageSnapshot } from "./types.js";
 import path from "node:path";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 export { contextPercentFromSignals, renderBar, formatTokenCount } from "./bar.js";
@@ -54,8 +60,11 @@ export { normalizeBillingPayload } from "./billing.js";
 export {
   loadSnapshotFromDir,
   pickBestSession,
+  pickFromActiveSessions,
   discoverSessions,
   findSessionDirById,
+  sortSessionsByRecency,
+  sessionRecencyMs,
 } from "./session.js";
 export { renderHud, renderJson } from "./render.js";
 export { runHookTick } from "./hook.js";
@@ -92,6 +101,8 @@ export interface CliOptions {
   runInTerminal: boolean;
   theme?: string;
   preset?: string;
+  settings: boolean;
+  language?: string;
 }
 
 export function parseArgs(argv: string[]): CliOptions {
@@ -116,6 +127,7 @@ export function parseArgs(argv: string[]): CliOptions {
     dashboardStop: false,
     dashboardWindow: false,
     runInTerminal: false,
+    settings: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -211,6 +223,16 @@ export function parseArgs(argv: string[]): CliOptions {
       case "--preset":
         opts.preset = argv[++i];
         break;
+      case "--settings":
+      case "--config-ui":
+      case "settings":
+        opts.settings = true;
+        break;
+      case "--lang":
+      case "--language":
+        opts.language = argv[++i];
+        opts.settings = true;
+        break;
       case "-h":
       case "--help":
         opts.help = true;
@@ -232,24 +254,31 @@ export function parseArgs(argv: string[]): CliOptions {
 export function helpText(): string {
   return `grok-build-hud — live context + quota in the SAME Terminal window
 
-Same-window mode (recommended, no second window):
-  grok-hud-run
-  # or:  grok-build-hud --run
-  # Starts Grok inside this tab with a permanent BOTTOM status bar:
-  #   ctx 44% │ quota 23% │ GrokBuild 10% │ t8 │ tools 144
+After install:
+  1. Open Terminal (shell hook ensures HUD daemon)
+  2. Type:  grok
+     → Grok + bottom HUD (IN/OUT/CACHE exact token counts)
+     bare CLI:  GROK_NO_HUD=1 grok -p "hi"
 
 Install once:
   grok-build-hud --install-dashboard
 
-Then:
-  grok-hud-run          # start Grok + bottom bar (same window)
-  grok-hud status       # print full dual bars once
+Also:
+  grok-hud status       # full dual bars + token breakdown
   grok-hud stop         # stop background updater
-  grok-build-hud --theme auto              # follow Grok [ui].theme
-  grok-build-hud --preset full|essential|minimal   # Claude-HUD presets
-  grok-hud-run                             # same-window Grok + multi-line HUD
+  grok-build-hud --theme auto   # follow Grok /theme (default, not locked)
+  grok-build-hud --preset full|essential|minimal
+  grok-hud settings             # 设定界面（语言 中/英、预设、行数）
+  grok-hud lang zh              # 快捷：简体中文
+  grok-hud lang en              # 快捷：English
 
-Claude HUD users: see MIGRATION-FROM-CLAUDE.md
+Theme: always tracks Grok [ui].theme (auto → OS light/dark maps).
+  Change inside Grok with /theme — HUD re-paints in ~1s.
+
+Language: default 简体中文; switch in settings or: grok-hud lang en
+
+Lifecycle: Terminal open → ready (not machine boot).
+Docs: README.md · README.zh-CN.md
 `;
 }
 
@@ -328,37 +357,87 @@ export async function runCli(
     return 0;
   }
 
+  if (opts.settings) {
+    const { runSettingsUi } = await import("./settings-ui.js");
+    const grokHome = opts.grokHome ?? defaultGrokHome();
+    const saved = await runSettingsUi({
+      grokHome,
+      language: opts.language,
+    });
+    if (saved) {
+      writeTmuxConfFile(grokHome);
+      applyTmuxStatusBar({ grokHome });
+      await refreshDashboard({ grokHome });
+      // restart daemon so labels pick up language
+      stopDashboard(grokHome);
+      ensureDashboardDaemon({
+        grokHome,
+        entryJs: path.join(packageRoot(), "dist", "src", "index.js"),
+        intervalMs: 500,
+      });
+    }
+    return 0;
+  }
+
   if (opts.preset) {
     const p = opts.preset.toLowerCase();
     if (p !== "full" && p !== "essential" && p !== "minimal") {
       err("Preset must be: full | essential | minimal");
       return 1;
     }
+    const grokHome = opts.grokHome ?? defaultGrokHome();
+    const prev = loadHudConfig(grokHome);
     const cfg = applyPreset(p as HudPreset);
-    // keep readability defaults when applying presets
+    // keep readability defaults + user language
     cfg.bold = true;
     cfg.barWidth = Math.max(cfg.barWidth ?? 12, 12);
-    const saved = saveHudConfig(cfg, opts.grokHome ?? defaultGrokHome());
+    cfg.language = prev.language ?? "zh-Hans";
+    const saved = saveHudConfig(cfg, grokHome);
     writeTmuxConfFile(opts.grokHome);
     applyTmuxStatusBar({ grokHome: opts.grokHome });
     await refreshDashboard({ grokHome: opts.grokHome });
     out(
       `HUD preset → ${p} (${cfg.statusLines} status row(s), bold, barWidth=${cfg.barWidth})\n  config: ${saved}\n` +
-        `Claude HUD map: Full≈full, Essential≈essential, Minimal≈minimal`,
+        `language: ${cfg.language}\n` +
+        `presets: full | essential | minimal`,
     );
     return 0;
   }
 
   if (opts.theme) {
     const mode = resolveThemeMode(opts.theme);
-    persistTheme(mode);
-    process.env.GROK_HUD_THEME = mode;
     clearAppearanceCache();
     const grokHome = opts.grokHome ?? defaultGrokHome();
+    // Default path: always follow Grok. --theme auto restores follow mode.
+    // --theme tokyonight only previews once unless GROK_HUD_LOCK=1.
+    if (mode === "auto" || mode === "system") {
+      ensureFollowMode(grokHome);
+      persistTheme("auto");
+      delete process.env.GROK_HUD_THEME;
+      delete process.env.GROK_HUD_LOCK;
+    } else if (process.env.GROK_HUD_LOCK === "1") {
+      persistTheme(mode);
+      process.env.GROK_HUD_THEME = mode;
+    } else {
+      // One-shot preview without locking
+      persistTheme("auto");
+    }
     const ui = readGrokUiConfig(grokHome);
-    const t = resolveTheme(mode, process.env, { grokHome });
+    const t =
+      mode === "auto" || mode === "system"
+        ? resolveTheme("auto", process.env, { grokHome })
+        : resolveTheme(mode, process.env, { grokHome });
     writeTmuxConfFile(grokHome);
     applyTmuxStatusBar({ grokHome });
+    // force fingerprint rewrite next tick
+    try {
+      fs.writeFileSync(
+        path.join(grokHome, "hud", ".last-theme"),
+        themeFingerprint(t, ui, process.env) + "\n",
+      );
+    } catch {
+      /* ignore */
+    }
     await refreshDashboard({ grokHome });
     stopDashboard(grokHome);
     ensureDashboardDaemon({
@@ -366,15 +445,24 @@ export async function runCli(
       entryJs: path.join(packageRoot(), "dist", "src", "index.js"),
       intervalMs: 500,
     });
-    if (mode === "auto") {
+    if (mode === "auto" || mode === "system") {
       out(
-        `HUD follows Grok theme: [ui] theme="${ui.theme}" → palette "${t.name}"\n` +
-          `Change with /theme inside Grok; HUD updates within ~1s.\n` +
-          `Force lock: grok-build-hud --theme tokyonight|grokday|light|dark`,
+        `HUD follows Grok [ui].theme (not locked).\n` +
+          `  config: theme="${ui.theme}" → palette "${t.name}"\n` +
+          `  auto maps: dark→${ui.autoDarkTheme}  light→${ui.autoLightTheme}\n` +
+          `Change with /theme inside Grok; HUD re-paints within ~1s.\n` +
+          `Optional lock: GROK_HUD_LOCK=1 grok-build-hud --theme tokyonight`,
+      );
+    } else if (process.env.GROK_HUD_LOCK === "1") {
+      out(
+        `Theme locked to "${t.name}" (GROK_HUD_LOCK=1).\n` +
+          `Unlock: grok-build-hud --theme auto`,
       );
     } else {
       out(
-        `Theme locked to "${t.name}". Use --theme auto to follow Grok [ui].theme again.`,
+        `Preview palette "${t.name}" once; still following Grok after this.\n` +
+          `To lock: GROK_HUD_LOCK=1 grok-build-hud --theme ${mode}\n` +
+          `Follow mode: grok-build-hud --theme auto`,
       );
     }
     return 0;
@@ -386,16 +474,38 @@ export async function runCli(
         grokHome: opts.grokHome,
         startDaemon: true,
       });
-      const launchers = installSameWindowLauncher();
-      out("Installed SAME-WINDOW dashboard (no second window):");
-      out(`  start:    ${launchers.runPath}`);
-      out(`           → run:  grok-hud-run`);
-      out(`  also:     ${launchers.grokWrapPath}`);
-      out(`  hooks:    ${r.hooksPath}`);
-      out(`  tmux cfg: ${r.tmuxConf}`);
-      if (r.launchAgent) out(`  launchd:  ${r.launchAgent} (file updater)`);
+      // Always follow Grok [ui].theme — clear any legacy locked palette
+      const home = opts.grokHome ?? defaultGrokHome();
+      ensureFollowMode(home);
+      const hudCfg = ensureDefaultConfig(home);
+      // wrapGrokCommand already done inside installDashboard; still refresh run shims
+      const launchers = installSameWindowLauncher({ wrapGrokCommand: true });
+      out("Installed Grok + HUD (same window, no second window):");
+      out(`  ★ start:   grok`);
+      out(`             (plain command — auto HUD; no extra flags)`);
+      out(`  theme:     follows Grok /theme (not locked)`);
       out(
-        `  daemon:   ${r.daemon.alreadyRunning ? "already running" : r.daemon.started ? `started pid ${r.daemon.pid}` : "not started"}`,
+        `  language:  ${hudCfg.language}  (设定: grok-hud settings · 切英文: grok-hud lang en)`,
+      );
+      if (r.grokWrap) {
+        out(`  wrap:      ${r.grokWrap.wrapperPath}`);
+        out(`  real bin:  ${r.grokWrap.realPath}`);
+        out(`             bare escape: GROK_NO_HUD=1 grok …`);
+      }
+      out(`  alias:     ${launchers.runPath}  (same as grok)`);
+      out(`  hooks:     ${r.hooksPath}`);
+      out(`  tmux cfg:  ${r.tmuxConf}`);
+      if (r.terminalHook) {
+        out(`  terminal:  ${r.terminalHook}`);
+        out(`             (opens Terminal → auto ensure HUD daemon)`);
+      }
+      if (r.launchAgent) {
+        out(
+          `  agent:     ${r.launchAgent}  (optional, not login-boot; Terminal-driven)`,
+        );
+      }
+      out(
+        `  daemon:    ${r.daemon.alreadyRunning ? "already running" : r.daemon.started ? `started pid ${r.daemon.pid}` : "not started"}`,
       );
       await refreshDashboard({ grokHome: opts.grokHome });
       if (isInsideTmux()) {
@@ -403,7 +513,7 @@ export async function runCli(
         out("\nAlready inside tmux — status bar applied to THIS window.");
       } else {
         out(
-          "\n★ To show the bar in THIS Terminal window:\n  1. End current Grok session (/quit)\n  2. Run:  grok-hud-run\n  Bottom line will always show ctx + quota — no second window.",
+          "\n★ 打开 Terminal 后输入：  grok\n  同标签页启动 Grok + 底部 HUD（含 IN/OUT/CACHE 精确数字）。\n  开终端会自动拉起 status 更新器；不是开机自启。",
         );
       }
       return 0;
@@ -506,7 +616,7 @@ export async function runCli(
       return one ? [one] : [];
     }
     if (opts.followActive || (!opts.cwd && !opts.session)) {
-      // Prefer any live active session first
+      // Prefer newest live active session (not active_sessions insertion order)
       const active = loadActiveSessions(grokHome);
       const liveSnaps: SessionSnapshot[] = [];
       for (const a of active) {
@@ -516,8 +626,9 @@ export async function runCli(
         if (snap) liveSnaps.push(snap);
       }
       if (liveSnaps.length) {
+        const ranked = sortSessionsByRecency(liveSnaps, active);
         if (opts.cwd) {
-          const matched = liveSnaps.filter((s) =>
+          const matched = ranked.filter((s) =>
             s.cwd ? s.cwd === opts.cwd || s.cwd.includes(opts.cwd!) : false,
           );
           // use path equality via discover as fallback
@@ -526,11 +637,14 @@ export async function runCli(
           if (matched.length) return matched;
         }
         if (opts.session) {
-          const m = liveSnaps.filter((s) => s.sessionId === opts.session);
+          const m = ranked.filter((s) => s.sessionId === opts.session);
           if (m.length) return m;
         }
-        if (!opts.cwd && !opts.session) return liveSnaps;
+        if (!opts.cwd && !opts.session) return ranked;
       }
+      // Single-shot helper for tests / callers
+      const one = pickFromActiveSessions(grokHome);
+      if (one && !opts.cwd && !opts.session) return [one];
     }
     return discoverSessions(discoverOpts);
   };

@@ -5,6 +5,7 @@ import {
   renderBar,
 } from "./bar.js";
 import { formatToolLine } from "./activity.js";
+import { formatTokenBreakdownLine } from "./token-usage.js";
 import type {
   RenderOptions,
   SessionSnapshot,
@@ -85,9 +86,26 @@ export function renderHud(
   }
   if (session.turnCount > 0) meta.push(`Turns ${session.turnCount}`);
   if (session.toolCallCount > 0) meta.push(`Tools ${session.toolCallCount}`);
-  const line2 = `${ctxLabel} ${bar} ${pct}%${tokenPart}${meta.length ? ` │ ${meta.join(" │ ")}` : ""}`;
+  const tokLine = session.lastTurnTokens
+    ? formatTokenBreakdownLine(session.lastTurnTokens, { mode: "exact" })
+    : "";
+  const line2 = `${ctxLabel} ${bar} ${pct}%${tokenPart}${tokLine ? ` │ ${tokLine}` : ""}${meta.length ? ` │ ${meta.join(" │ ")}` : ""}`;
 
   const lines = [line1, line2];
+  if (
+    session.sessionTokens &&
+    session.lastTurnTokens &&
+    (session.sessionTokens.inputTokens !== session.lastTurnTokens.inputTokens ||
+      session.sessionTokens.outputTokens !==
+        session.lastTurnTokens.outputTokens)
+  ) {
+    lines.push(
+      formatTokenBreakdownLine(session.sessionTokens, {
+        mode: "exact",
+        prefix: "ΣTOK",
+      }),
+    );
+  }
 
   const usageLine = formatUsageLine(usage, options);
   if (usageLine) lines.push(usageLine);

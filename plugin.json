@@ -1,7 +1,7 @@
 {
   "name": "grok-build-hud",
-  "version": "0.3.0",
-  "description": "Claude-HUD-style multi-line live status for Grok Build (context, quota, tools, todos, git)",
+  "version": "0.3.9",
+  "description": "Live multi-line status strip for Grok Build: context, quota, tokens, tools, todos, git",
   "author": {
     "name": "sooneocean",
     "email": "redredchen01@gmail.com"

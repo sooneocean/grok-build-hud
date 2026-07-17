@@ -1,11 +1,11 @@
 ---
 name: grok-build-hud
-description: Explain and operate the Claude-HUD-style external status HUD for Grok Build (same-window multi-line context, quota, tools, todos, theme sync).
+description: Explain and operate the Grok Build live status HUD (same-window multi-line context, quota, tokens, tools, todos, theme sync, Chinese/English settings).
 ---
 
 # grok-build-hud
 
-Grok Build has **no** Claude Code statusline API. This package provides a Claude-HUD-like always-on strip via **same-window tmux status** plus optional scrollback annotations.
+Always-on status strip for **Grok Build**: multi-line bar in the **same Terminal tab** (tmux status) plus optional scrollback annotations. Reads local session files and your Grok auth for quota — no second window required.
 
 ## What it shows
 
@@ -16,7 +16,7 @@ Grok Build has **no** Claude Code statusline API. This package provides a Claude
 Data sources (local):
 
 - `~/.grok/sessions/**/signals.json` — context window
-- `updates.jsonl` — tools / agents / todos
+- `updates.jsonl` — tools / agents / todos / token usage
 - `summary.json` — title, effort, model
 - Grok auth → `cli-chat-proxy` billing for quota
 
@@ -31,19 +31,21 @@ bash scripts/install.sh
 ## Daily
 
 ```bash
-grok-hud-run                              # Grok + bottom HUD (same tab)
-grok-hud status                           # one-shot print
+grok                              # wrapped: Grok + bottom HUD (same tab)
+grok-hud status                   # one-shot print
+grok-hud settings                 # language (中/英), preset, rows
+grok-hud lang zh|en|tw
 grok-build-hud --preset full|essential|minimal
-grok-build-hud --theme auto               # follow Grok [ui].theme
-grok-hud stop                             # stop dashboard daemon
+grok-build-hud --theme auto       # follow Grok [ui].theme
+grok-hud stop                     # stop dashboard daemon
 ```
 
 ## In-session slash commands (if plugin enabled)
 
-- `/hud` `/status` `/quota` `/preset` `/setup` `/watch` — see `commands/`
+- `/hud` `/status` `/quota` `/preset` `/setup` `/watch` `/settings` — see `commands/`
 
 ## Config
 
-`~/.grok/hud/config.json` — presets, `bold`, `barWidth`, display toggles.
+`~/.grok/hud/config.json` — language, presets, `bold`, `barWidth`, display toggles.
 
-Full docs: [README.md](../../README.md) · 中文: [README.zh-CN.md](../../README.zh-CN.md) · Claude migrate: [MIGRATION-FROM-CLAUDE.md](../../MIGRATION-FROM-CLAUDE.md)
+Full docs: [README.md](../../README.md) · 中文: [README.zh-CN.md](../../README.zh-CN.md)

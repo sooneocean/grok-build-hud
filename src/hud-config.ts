@@ -1,5 +1,5 @@
 /**
- * Claude-HUD-compatible display config + presets.
+ * Grok Build HUD display config + presets.
  * Stored at ~/.grok/hud/config.json
  */
 import fs from "node:fs";
@@ -40,6 +40,15 @@ export interface HudDisplayConfig {
     showDiffStats: boolean;
     showLive: boolean;
     showTitle: boolean;
+    /** Show input/output/cache token breakdown (exact integers). */
+    showTokenBreakdown: boolean;
+    /**
+     * Which token totals to show: last completed turn, session sum, or both.
+     * Default "last" (most relevant); full status.txt also prints session sum.
+     */
+    tokenScope: "last" | "session" | "both";
+    /** exact = 974,820 full digits; short = 974.8k */
+    tokenDigits: "exact" | "short";
   };
   warningThreshold: number;
   criticalThreshold: number;
@@ -49,7 +58,8 @@ export const PRESET_FULL: HudDisplayConfig = {
   preset: "full",
   lineLayout: "expanded",
   pathLevels: 2,
-  language: "en",
+  /** Default UI language: 简体中文 (switch to en in settings) */
+  language: "zh-Hans",
   statusLines: 3,
   bold: true,
   barWidth: 14,
@@ -72,6 +82,9 @@ export const PRESET_FULL: HudDisplayConfig = {
     showDiffStats: true,
     showLive: true,
     showTitle: true,
+    showTokenBreakdown: true,
+    tokenScope: "both",
+    tokenDigits: "exact",
   },
   warningThreshold: 70,
   criticalThreshold: 90,
@@ -91,6 +104,9 @@ export const PRESET_ESSENTIAL: HudDisplayConfig = {
     showDiffStats: false,
     showTitle: false,
     contextValue: "percent",
+    showTokenBreakdown: true,
+    tokenScope: "last",
+    tokenDigits: "exact",
   },
 };
 
@@ -116,6 +132,9 @@ export const PRESET_MINIMAL: HudDisplayConfig = {
     showDiffStats: false,
     showTitle: false,
     contextValue: "percent",
+    showTokenBreakdown: true,
+    tokenScope: "last",
+    tokenDigits: "short",
   },
 };
 
@@ -131,6 +150,7 @@ export function loadHudConfig(
     if (!fs.existsSync(p)) {
       return {
         ...PRESET_FULL,
+        language: "zh-Hans",
         display: { ...PRESET_FULL.display },
       };
     }
@@ -144,6 +164,8 @@ export function loadHudConfig(
     return {
       ...base,
       ...raw,
+      // Prefer saved language; default 中文 when missing
+      language: raw.language ?? base.language ?? "zh-Hans",
       bold: raw.bold ?? base.bold ?? true,
       barWidth: raw.barWidth ?? base.barWidth ?? 14,
       statusLines: raw.statusLines ?? base.statusLines ?? 3,
@@ -152,9 +174,27 @@ export function loadHudConfig(
   } catch {
     return {
       ...PRESET_FULL,
+      language: "zh-Hans",
       display: { ...PRESET_FULL.display },
     };
   }
+}
+
+/** Ensure config exists with Chinese default (idempotent). */
+export function ensureDefaultConfig(
+  grokHome = path.join(os.homedir(), ".grok"),
+): HudDisplayConfig {
+  const p = configPath(grokHome);
+  if (!fs.existsSync(p)) {
+    const cfg = {
+      ...PRESET_FULL,
+      language: "zh-Hans" as const,
+      display: { ...PRESET_FULL.display },
+    };
+    saveHudConfig(cfg, grokHome);
+    return cfg;
+  }
+  return loadHudConfig(grokHome);
 }
 
 export function saveHudConfig(
@@ -174,20 +214,21 @@ export function applyPreset(preset: HudPreset): HudDisplayConfig {
   return { ...PRESET_FULL, display: { ...PRESET_FULL.display } };
 }
 
-/** Claude-HUD option name → Grok HUD config path (migration map). */
-export const CLAUDE_HUD_MIGRATION: Record<string, string> = {
-  "display.showModel": "display.showModel",
-  "display.showContextBar": "display.showContextBar",
-  "display.contextValue": "display.contextValue",
-  "display.showUsage": "display.showUsage",
-  "display.showSessionTime / sessionTime": "display.showSessionTime",
-  "gitStatus.enabled": "display.showGit",
-  "gitStatus.showDirty": "display.showGitDirty",
-  "display tools activity": "display.showToolActivity",
-  "display agents": "display.showAgents",
-  "display todos": "display.showTodos",
-  lineLayout: "lineLayout",
-  pathLevels: "pathLevels",
-  language: "language",
-  "presets Full/Essential/Minimal": "preset",
-};
+/** Documented display option keys (for settings / docs). */
+export const DISPLAY_OPTION_KEYS = [
+  "display.showModel",
+  "display.showContextBar",
+  "display.contextValue",
+  "display.showUsage",
+  "display.showSessionTime",
+  "display.showGit",
+  "display.showGitDirty",
+  "display.showToolActivity",
+  "display.showAgents",
+  "display.showTodos",
+  "display.showTokenBreakdown",
+  "lineLayout",
+  "pathLevels",
+  "language",
+  "preset",
+] as const;

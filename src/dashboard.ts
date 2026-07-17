@@ -10,13 +10,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   defaultGrokHome,
-  findSessionDirById,
   loadActiveSessions,
   loadSnapshotFromDir,
+  findSessionDirById,
   pickBestSession,
+  pickFromActiveSessions,
 } from "./session.js";
 import { getCreditUsage } from "./billing.js";
 import { writeStatusFiles, formatCompactLine } from "./status.js";
+import { findTmuxSessionForPid } from "./multi-session.js";
 import type { SessionSnapshot, UsageSnapshot } from "./types.js";
 
 export function dashboardPidPath(grokHome = defaultGrokHome()): string {
@@ -64,59 +66,39 @@ export function writeOscTitle(ttyPath: string, title: string): boolean {
 }
 
 /**
- * Apple Terminal: set tab/window custom title so it appears in the title bar.
- * Terminal composes: "cwd — custom title — process — size"
- * We cannot reliably toggle title-display flags on all locales, but custom
- * title is always shown when set on the tab.
+ * Apple Terminal: set tab custom title for ONE tty only.
+ * Never broadcast to all tabs — that broke parallel Terminal development.
  */
 export function setAppleTerminalTitle(
   title: string,
   options: { ttyHint?: string | null } = {},
 ): boolean {
   if (process.platform !== "darwin") return false;
+  const tty = (options.ttyHint || "")
+    .replace(/^\/dev\//, "")
+    .replace(/"/g, "");
+  // Without a tty match target, skip (do not overwrite every tab)
+  if (!tty) return false;
   try {
     const safe = title
       .replace(/\\/g, "\\\\")
       .replace(/"/g, '\\"')
       .replace(/[\x00-\x1f\x7f]/g, " ")
       .slice(0, 100);
-    const tty = (options.ttyHint || "")
-      .replace(/^\/dev\//, "")
-      .replace(/"/g, "");
-    // Prefer matching tab by tty; else set every Terminal tab/window.
     const script = `
 tell application "Terminal"
   set hud to "${safe}"
   set targetTty to "${tty}"
-  set matched to false
-  if targetTty is not "" then
-    repeat with w in windows
-      repeat with tb in tabs of w
-        try
-          set t to tty of tb as string
-          if t contains targetTty then
-            set custom title of tb to hud
-            try
-              set custom title of w to hud
-            end try
-            set matched to true
-          end if
-        end try
-      end repeat
-    end repeat
-  end if
-  if matched is false then
-    repeat with w in windows
+  repeat with w in windows
+    repeat with tb in tabs of w
       try
-        set custom title of w to hud
-      end try
-      repeat with tb in tabs of w
-        try
+        set t to tty of tb as string
+        if t contains targetTty then
           set custom title of tb to hud
-        end try
-      end repeat
+        end if
+      end try
     end repeat
-  end if
+  end repeat
 end tell
 `;
     execFileSync("osascript", ["-e", script], {
@@ -129,27 +111,34 @@ end tell
   }
 }
 
+/** All live Grok sessions (parallel Terminals). */
+export function listLiveSessions(grokHome = defaultGrokHome()): SessionSnapshot[] {
+  const active = loadActiveSessions(grokHome);
+  const out: SessionSnapshot[] = [];
+  for (const a of active) {
+    const dir = findSessionDirById(grokHome, a.session_id);
+    if (!dir) continue;
+    const snap = loadSnapshotFromDir(dir, { active });
+    if (snap?.live) out.push(snap);
+  }
+  return out;
+}
+
 export async function refreshDashboard(options: {
   grokHome?: string;
   noUsage?: boolean;
 }): Promise<{ title: string; session: SessionSnapshot | null }> {
   const grokHome = options.grokHome ?? defaultGrokHome();
-  const active = loadActiveSessions(grokHome);
-  let session: SessionSnapshot | null = null;
+  // Parallel Terminals: update EVERY live session independently.
+  // Global "primary" = most recently active (for status.json / hooks fallback).
+  let primary: SessionSnapshot | null = pickFromActiveSessions(grokHome);
+  if (!primary) primary = pickBestSession({ grokHome });
 
-  for (const a of active) {
-    const dir = findSessionDirById(grokHome, a.session_id);
-    if (!dir) continue;
-    const snap = loadSnapshotFromDir(dir, { active });
-    if (snap?.live) {
-      session = snap;
-      break;
-    }
-    if (!session && snap) session = snap;
-  }
-  if (!session) session = pickBestSession({ grokHome });
+  const live = listLiveSessions(grokHome);
+  const targets =
+    live.length > 0 ? live : primary ? [primary] : [];
 
-  if (!session) {
+  if (!targets.length) {
     return { title: "◆ grok-hud: no session", session: null };
   }
 
@@ -162,17 +151,23 @@ export async function refreshDashboard(options: {
     }
   }
 
-  // Theme follows Grok [ui].theme; re-apply tmux chrome when palette flips
-  const { resolveTheme } = await import("./theme.js");
+  // Theme always follows Grok [ui].theme (auto → OS light/dark maps).
+  // Fingerprint includes mapping + system appearance so /theme and OS toggle re-paint.
+  const {
+    resolveTheme,
+    readGrokUiConfig,
+    themeFingerprint,
+  } = await import("./theme.js");
+  const ui = readGrokUiConfig(grokHome);
   const theme = resolveTheme(undefined, process.env, { grokHome });
-  writeStatusFiles(session, usage, grokHome);
   try {
     const stamp = path.join(grokHome, "hud", ".last-theme");
+    const fp = themeFingerprint(theme, ui, process.env);
     const prev = fs.existsSync(stamp)
       ? fs.readFileSync(stamp, "utf8").trim()
       : "";
-    if (prev !== theme.name) {
-      fs.writeFileSync(stamp, theme.name + "\n", "utf8");
+    if (prev !== fp) {
+      fs.writeFileSync(stamp, fp + "\n", "utf8");
       const { writeTmuxConfFile, applyTmuxStatusBar } = await import(
         "./tmux-hud.js"
       );
@@ -182,38 +177,38 @@ export async function refreshDashboard(options: {
   } catch {
     /* ignore */
   }
-  const title = titleLine(session, usage);
 
-  // 1) OSC into Grok's TTY (updates process title component)
-  const tty = ttyForPid(session.pid);
-  if (tty) writeOscTitle(tty, title);
+  // Write per-tmux-session status so each Terminal bar shows ITS own Grok
+  // Layout adapts to each window's client width.
+  for (const snap of targets) {
+    const tmuxSession = findTmuxSessionForPid(snap.pid);
+    const tty = ttyForPid(snap.pid);
+    const isPrimary =
+      primary != null && snap.sessionId === primary.sessionId;
+    writeStatusFiles(snap, usage, grokHome, {
+      tmuxSession,
+      ttyPath: tty,
+      // Only primary overwrites global status.* (hooks / grok-hud status)
+      writeGlobal: isPrimary || targets.length === 1,
+    });
 
-  // 2) Apple Terminal custom title (always visible as middle segment of window title)
-  //    e.g. "0717 — ◆ ctx 44% | quota 23% — zsh — 101×50"
-  const ttyHint = tty ? path.basename(tty) : null;
-  setAppleTerminalTitle(title, { ttyHint });
-
-  // tmux-status.txt is written by writeStatusFiles (formatTmuxStatusLine)
-
-  // If already inside tmux (same-window mode), keep status bar config applied
-  if (process.env.TMUX) {
-    try {
-      execFileSync(
-        "tmux",
-        [
-          "set",
-          "-g",
-          "status-right",
-          `#(cat ${path.join(grokHome, "hud", "tmux-status.txt")} 2>/dev/null)`,
-        ],
-        { stdio: "ignore", timeout: 1000 },
-      );
-    } catch {
-      /* ignore */
+    const title = titleLine(snap, usage);
+    if (tty) {
+      writeOscTitle(tty, title);
+      setAppleTerminalTitle(title, { ttyHint: path.basename(tty) });
     }
   }
 
-  return { title, session };
+  // If somehow no primary write happened, write one
+  if (primary && !targets.some((t) => t.sessionId === primary!.sessionId)) {
+    writeStatusFiles(primary, usage, grokHome, {
+      tmuxSession: findTmuxSessionForPid(primary.pid),
+      writeGlobal: true,
+    });
+  }
+
+  const session = primary ?? targets[0]!;
+  return { title: titleLine(session, usage), session };
 }
 
 export function isDashboardRunning(grokHome = defaultGrokHome()): boolean {

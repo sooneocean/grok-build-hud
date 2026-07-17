@@ -1,18 +1,18 @@
 # grok-build-hud
 
-**给 [Grok Build](https://x.ai/cli) 用的 Claude-HUD 风格状态条。**
+**[Grok Build](https://x.ai/cli) 的实时多行状态条。**
 
-在**同一个 Terminal 窗口底部**常驻显示（用 tmux 状态栏，不会多开窗口）：
+在**同一个 Terminal 窗口底部**常驻显示（tmux 状态栏，不另开窗口）：
 
 ```text
-[Grok 4.5] │ my-project git:(main*) │ ● LIVE
-CTX ██████████░░░░ 70% (351k/500k) │ USE ███░░░░░░░░░░░ 23% weekly · 4d │ TIME 1h │ T 16 │ TOOLS 299
-◐ read_file… | ✓ grep ×3 | ▸ Ship HUD (2/5)
+[Grok 4.5] · my-project git · ●
+窗 ██████░░░░ 70% (351k/500k) · 入 … 出 … 缓 … · 额 23% · 轮 16
+◐ read_file… · ✓ grep ×3 · ▸ todos
 ```
 
-> Grok 没有 Claude 那种 statusline API。本工具用「同窗口多行状态条」实现同等体验。
+专为 Grok Build 会话设计：上下文窗口、配额、**入/出/缓存 token**、工具、待办、git；支持中英文 UI，主题跟随 Grok。
 
-中文版说明见本页；英文完整文档见 [README.md](./README.md)。
+中文说明见本页；英文见 [README.md](./README.md)。
 
 ---
 
@@ -75,13 +75,44 @@ export PATH="$(npm prefix -g)/bin:$HOME/.local/bin:$PATH"
 ## 日常使用
 
 ```bash
-# 在本标签页启动 Grok，底部自带多行 HUD（不要另开窗）
+# 1) 打开 Terminal（会自动确保 HUD 后台更新器）
+# 2) 直接输入：
+grok
+
+# 底部状态条会显示：
+#   CTX … │ TOK IN 974,820 · OUT 15,706 · CACHE 944,000 (97%) │ USE …
+# （input / output / cache 精确数字，来自本会话 turn_completed）
+
+# 不要 HUD 的裸命令（脚本 / -p 打印模式）
+GROK_NO_HUD=1 grok -p "hello"
+
+# 旧名字仍然可用
 grok-hud-run
 ```
 
-| 行 | 内容（类比 Claude HUD） |
-|----|-------------------------|
-| 第 1 行 | 模型 · 项目 · git · 是否 live · 标题 · effort |
+**生命周期**：开 **Terminal** 就绪，不是电脑开机自启。  
+`~/.zshrc` 里会装一段 interactive hook；输入 `grok` 即带 HUD。
+
+**并行开发**：每个 Terminal 标签页是**独立** Grok session（独立 tmux 名，互不 attach）。  
+多开几个终端，各自 `grok` 即可同时干活，不会串会话。
+
+## 设定（语言 / 预设）
+
+```bash
+# 交互设定界面（默认中文）
+grok-hud settings
+
+# 快捷切换语言
+grok-hud lang zh    # 简体中文（默认）
+grok-hud lang en    # English
+grok-hud lang tw    # 繁體中文
+```
+
+状态条标签会跟着语言变：中文 `窗/额/入/出/缓`，英文 `ctx/use/i/o/c`。
+
+| 行 | 内容 |
+|----|------|
+| 第 1 行 | 模型 · 项目 · git · 是否在线 · 标题 · effort |
 | 第 2 行 | **上下文**进度条 + token · **配额** · 时长 · 轮次 · 工具数 · 错误 · diff |
 | 第 3 行 | 最近工具 · agents · todos · GrokBuild 用量占比 |
 
@@ -131,18 +162,6 @@ tmux source-file ~/.grok/hud/tmux.conf && tmux refresh-client -S
 ## 工作原理（一句话）
 
 读本机 `~/.grok/sessions/**` 的 signals / updates / summary，用你已有的 Grok 登录去查周配额；后台 daemon 写状态文件，由 **同窗口 tmux 状态栏**显示。不上传你的代码。
-
----
-
-## 从 Claude HUD 迁过来
-
-见 **[MIGRATION-FROM-CLAUDE.md](./MIGRATION-FROM-CLAUDE.md)**。
-
-| Claude HUD | 本工具 |
-|------------|--------|
-| 提示符下 statusline | 同窗口 tmux 多行条 |
-| Full / Essential / Minimal | `--preset full\|essential\|minimal` |
-| `/claude-hud:setup` | `--install-dashboard` + `grok-hud-run` |
 
 ---
 
