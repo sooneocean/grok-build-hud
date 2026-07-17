@@ -1,0 +1,13 @@
+{
+  "name": "grok-build-hud-local",
+  "description": "Local marketplace entry for grok-build-hud",
+  "owner": { "name": "sooneocean" },
+  "plugins": [
+    {
+      "name": "grok-build-hud",
+      "source": { "type": "local", "path": ".." },
+      "description": "Claude-HUD-style live status HUD for Grok Build",
+      "category": "monitoring"
+    }
+  ]
+}

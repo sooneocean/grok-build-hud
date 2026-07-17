@@ -1,0 +1,9 @@
+{"timestamp":1000,"method":"session/update","params":{"sessionId":"fixture-session-001","update":{"sessionUpdate":"tool_call","toolCallId":"call-1","title":"read_file","rawInput":{"target_file":"/Users/dex/demo/CoachFlow/src/auth.ts"}}}}
+{"timestamp":1001,"method":"session/update","params":{"sessionId":"fixture-session-001","update":{"sessionUpdate":"tool_call_update","toolCallId":"call-1","status":"completed","title":"Read auth.ts"}}}
+{"timestamp":1002,"method":"session/update","params":{"sessionId":"fixture-session-001","update":{"sessionUpdate":"tool_call","toolCallId":"call-2","title":"grep","rawInput":{"pattern":"split","path":"src"}}}}
+{"timestamp":1003,"method":"session/update","params":{"sessionId":"fixture-session-001","update":{"sessionUpdate":"tool_call_update","toolCallId":"call-2","status":"completed"}}}
+{"timestamp":1004,"method":"session/update","params":{"sessionId":"fixture-session-001","update":{"sessionUpdate":"tool_call","toolCallId":"call-3","title":"run_terminal_command","rawInput":{"command":"ls -la src"}}}}
+{"timestamp":1005,"method":"session/update","params":{"sessionId":"fixture-session-001","update":{"sessionUpdate":"tool_call_update","toolCallId":"call-3","status":"completed","title":"Execute ls -la src"}}}
+{"timestamp":1006,"method":"session/update","params":{"sessionId":"fixture-session-001","update":{"sessionUpdate":"tool_call","toolCallId":"call-4","title":"read_file","rawInput":{"target_file":"/Users/dex/demo/CoachFlow/src/admin.ts"}}}}
+{"timestamp":1007,"method":"session/update","params":{"sessionId":"fixture-session-001","update":{"sessionUpdate":"tool_call_update","toolCallId":"call-4","kind":"read","title":"Read admin.ts"}}}
+{"timestamp":1008,"method":"session/update","params":{"sessionId":"fixture-session-001","update":{"sessionUpdate":"agent_thought_chunk","title":"explore","agentId":"agent-1"}}}

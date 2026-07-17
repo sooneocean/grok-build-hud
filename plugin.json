@@ -1,0 +1,14 @@
+{
+  "name": "grok-build-hud",
+  "version": "0.3.0",
+  "description": "Claude-HUD-style multi-line live status for Grok Build (context, quota, tools, todos, git)",
+  "author": {
+    "name": "sooneocean",
+    "email": "redredchen01@gmail.com"
+  },
+  "homepage": "https://github.com/sooneocean/grok-build-hud",
+  "repository": "https://github.com/sooneocean/grok-build-hud",
+  "commands": "./commands",
+  "skills": "./skills",
+  "hooks": "./hooks/hooks.json"
+}
