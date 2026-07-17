@@ -1,6 +1,8 @@
-# Contributing
+# 贡献指南
 
-## Setup
+> English notes: keep commit messages in English. Primary docs are Chinese ([README.md](./README.md)); English summary: [README.en.md](./README.en.md).
+
+## 环境
 
 ```bash
 git clone http://172.238.15.154:3000/Redredchen01/grok-hud.git
@@ -9,29 +11,31 @@ npm install
 npm test
 ```
 
-## Layout
+## 目录结构
 
-| Path | Role |
+| 路径 | 作用 |
 |------|------|
-| `src/` | TypeScript sources (session, billing, status, tmux, theme, CLI) |
-| `bin/` | CLI entrypoints (`grok-build-hud`, `grok-hud`, `grok-hud-run`, hook) |
-| `tests/` | Node built-in test runner (`node --test`) |
-| `fixtures/` | Session + billing samples for tests |
-| `commands/` / `skills/` | Grok plugin surface |
-| `scripts/install.sh` | One-shot local install |
+| `src/` | TypeScript 源码（session、billing、status、tmux、theme、CLI） |
+| `bin/` | 入口：`grok-build-hud`、`grok-hud`、`grok-hud-run`、hook |
+| `tests/` | Node 内置测试 (`node --test`) |
+| `fixtures/` | 测试用 session / billing 样例 |
+| `commands/` / `skills/` | Grok 插件表面 |
+| `scripts/install.sh` | 一键安装 |
+| `README.md` | **中文主文档** |
+| `README.en.md` | 英文简版 |
 
-## Rules of thumb
+## 约定
 
-- Prefer reading **local** `~/.grok/sessions/**` over inventing APIs.
-- Billing must **degrade gracefully** when offline / unauthenticated (never throw in render path).
-- Keep the HUD **same-window** (tmux status). Do not require a second Terminal window by default.
-- Add or update a test when changing parse/normalize/render behaviour.
-- Commit messages in English; user-facing docs may be EN + ZH.
+- 优先读本机 `~/.grok/sessions/**`，不臆造 API  
+- 配额接口离线 / 未登录时**优雅降级**（渲染路径不抛错）  
+- HUD 保持**同窗口**（tmux status），默认不另开 Terminal  
+- 改解析 / 渲染逻辑请补测试  
+- **Commit message 用英文**；用户文档以中文为主  
 
-## Before a PR
+## 提交前
 
 ```bash
 npm test
 ```
 
-All 40 tests should pass.
+全部测试通过后再 push。

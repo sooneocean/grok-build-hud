@@ -278,7 +278,7 @@ Theme: always tracks Grok [ui].theme (auto → OS light/dark maps).
 Language: default 简体中文; switch in settings or: grok-hud lang en
 
 Lifecycle: Terminal open → ready (not machine boot).
-Docs: README.md · README.zh-CN.md
+文档: README.md（中文）· README.en.md（English）
 `;
 }
 

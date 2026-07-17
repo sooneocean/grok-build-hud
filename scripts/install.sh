@@ -28,30 +28,31 @@ if [[ "$NODE_MAJOR" -lt 18 ]]; then
   exit 1
 fi
 
-echo "==> Installing dependencies"
+echo "==> 安装依赖"
 npm install
 
-echo "==> Building"
+echo "==> 编译"
 npm run build
 
-echo "==> Linking CLI onto PATH (npm link)"
+echo "==> 链接 CLI 到 PATH (npm link)"
 npm link
 
-echo "==> Installing dashboard (hooks + tmux conf + shims)"
+echo "==> 安装 dashboard（hooks + tmux + shims）"
 node bin/grok-build-hud.js --install-dashboard
 node bin/grok-build-hud.js --theme auto
 node bin/grok-build-hud.js --preset full
 
 echo ""
 VER="$(node -e "import('node:fs').then(fs=>console.log(JSON.parse(fs.readFileSync('package.json','utf8')).version))" 2>/dev/null || echo 0.3.0)"
-echo "Done. grok-build-hud v${VER}"
+echo "完成。grok-build-hud v${VER}"
 echo ""
-echo "  Start Grok with HUD (same window):  grok-hud-run"
-echo "  One-shot snapshot:                  grok-hud status"
-echo "  Preset:                             grok-build-hud --preset full"
-echo "  Theme:                              grok-build-hud --theme auto"
-echo "  Stop updater:                       grok-hud stop"
+echo "  启动 Grok + 底部 HUD：  grok"
+echo "  看当前状态一次：        grok-hud status"
+echo "  设定（语言/预设）：     grok-hud settings"
+echo "  主题跟随 Grok：         grok-build-hud --theme auto"
+echo "  停止后台刷新：          grok-hud stop"
 echo ""
-echo "中文说明: README.zh-CN.md"
-echo "If command not found, add to PATH and re-open the shell:"
+echo "文档（中文）：README.md"
+echo "English:      README.en.md"
+echo "若提示 command not found，把下面加入 PATH 后重开终端："
 echo "  export PATH=\"\$(npm prefix -g)/bin:\$HOME/.local/bin:\$PATH\""

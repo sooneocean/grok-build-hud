@@ -1,7 +1,7 @@
 {
   "name": "grok-build-hud",
-  "version": "0.3.9",
-  "description": "Live multi-line status strip for Grok Build: context, quota, tokens, tools, todos, git — same-window tmux bar with theme sync and Chinese/English UI",
+  "version": "0.3.10",
+  "description": "Grok Build 实时多行状态条：上下文、配额、入出缓存 token、工具与待办；同窗口 tmux、主题跟随、中英文 UI",
   "type": "module",
   "main": "dist/src/index.js",
   "bin": {
@@ -18,7 +18,7 @@
     "plugin.json",
     ".grok-plugin/",
     "README.md",
-    "README.zh-CN.md",
+    "README.en.md",
     "CHANGELOG.md",
     "LICENSE",
     "scripts/",

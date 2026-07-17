@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.10
+
+### Docs / repo
+- **中文 README 为主**：`README.md` 为完整中文文档；英文移至 `README.en.md`。
+- 删除 `README.zh-CN.md`，避免双主文档分叉。
+- CONTRIBUTING、package/plugin 描述、skill 链接同步中文优先。
+
 ## 0.3.9
 
 ### Docs / positioning

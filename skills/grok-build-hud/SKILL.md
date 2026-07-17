@@ -1,11 +1,11 @@
 ---
 name: grok-build-hud
-description: Explain and operate the Grok Build live status HUD (same-window multi-line context, quota, tokens, tools, todos, theme sync, Chinese/English settings).
+description: Grok Build 实时状态条（同窗口多行：上下文、配额、token、工具、待办；主题跟随；中英文设定）。
 ---
 
 # grok-build-hud
 
-Always-on status strip for **Grok Build**: multi-line bar in the **same Terminal tab** (tmux status) plus optional scrollback annotations. Reads local session files and your Grok auth for quota — no second window required.
+**Grok Build** 同窗口实时状态条（tmux）：上下文、配额、入/出/缓存 token、工具与待办。读本机会话文件与已有登录查配额，不另开窗口。
 
 ## What it shows
 
@@ -48,4 +48,4 @@ grok-hud stop                     # stop dashboard daemon
 
 `~/.grok/hud/config.json` — language, presets, `bold`, `barWidth`, display toggles.
 
-Full docs: [README.md](../../README.md) · 中文: [README.zh-CN.md](../../README.zh-CN.md)
+文档（中文主文档）：[README.md](../../README.md) · English: [README.en.md](../../README.en.md)
