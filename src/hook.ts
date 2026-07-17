@@ -173,7 +173,18 @@ export async function runHookTick(
       }
     }
 
-    const written = writeStatusFiles(snap, usage, grokHome);
+    // Bind to THIS Terminal's tmux instance when env is set (set by grok wrap).
+    // Avoid overwriting global status with a stale high-ctx session from another tab
+    // when this hook is for a brand-new session.
+    const tmuxSession =
+      env.GROK_HUD_TMUX_SESSION?.trim() ||
+      env.GROK_TMUX_SESSION?.trim() ||
+      null;
+    const written = writeStatusFiles(snap, usage, grokHome, {
+      tmuxSession,
+      // Always refresh global for CLI `grok-hud status`, but per-tmux is authoritative in UI
+      writeGlobal: true,
+    });
     const annotate =
       options.forceAnnotate || shouldEmitAnnotation(String(event), grokHome);
     if (annotate) {

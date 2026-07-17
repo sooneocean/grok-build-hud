@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.13
+
+### Fixes
+- **New window context leak**: brand-new Terminal no longer shows the previous
+  session’s high ctx%. Root causes fixed:
+  1. tmux status **no longer falls back** to global `~/.grok/hud/tmux-*.txt`
+  2. new tmux instances are **seeded at ctx 0%**
+  3. session ranking ignores `signals.json` mtime keepalive and prefers newest
+     `opened_at` among live sessions
+  4. stronger pid/tty → tmux binding via `resolveTmuxSessionForGrok`
+
 ## 0.3.12
 
 ### Repo / docs

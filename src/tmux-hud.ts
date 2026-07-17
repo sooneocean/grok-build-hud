@@ -13,10 +13,30 @@ import { resolveTheme, tmuxStatusChrome } from "./theme.js";
 import { loadHudConfig } from "./hud-config.js";
 import { installGrokCommandWrap } from "./grok-wrap.js";
 import {
+  detectControllingTtyBase,
   hudTmuxDir,
   uniqueTmuxSessionName,
   writeTmuxInstanceMeta,
 } from "./multi-session.js";
+
+/** Brand-new Terminal status: ctx 0%, no leakage from previous windows. */
+export function seedIdleTmuxStatus(instDir: string): void {
+  fs.mkdirSync(instDir, { recursive: true });
+  const idleSingle = "窗 ░░░░░░░░░░ 0% · —\n";
+  const idleLines = [
+    "— · —",
+    "窗 ░░░░░░░░░░ 0% · —",
+    "",
+  ].join("\n") + "\n";
+  fs.writeFileSync(path.join(instDir, "tmux-status.txt"), idleSingle, "utf8");
+  fs.writeFileSync(path.join(instDir, "tmux-lines.txt"), idleLines, "utf8");
+  fs.writeFileSync(path.join(instDir, "status-line.txt"), "[hud] ctx 0%\n", "utf8");
+}
+
+function detectControllingTtyPath(): string | null {
+  const base = detectControllingTtyBase();
+  return base ? `/dev/${base}` : null;
+}
 
 export function isInsideTmux(env: NodeJS.ProcessEnv = process.env): boolean {
   return Boolean(env.TMUX && env.TMUX.length > 0);
@@ -61,8 +81,9 @@ export function tmuxStatusCommands(grokHome = defaultGrokHome()): string[][] {
   // #{session_name} expanded by tmux before running #() — one bar per session
   const scopedLines = `${instRoot}/#{session_name}/tmux-lines.txt`;
   const scopedSingle = `${instRoot}/#{session_name}/tmux-status.txt`;
-  const fallbackLines = path.join(grokHome, "hud", "tmux-lines.txt");
-  const fallbackSingle = path.join(grokHome, "hud", "tmux-status.txt");
+  // NEVER fall back to global ~/.grok/hud/tmux-*.txt — that leaked the previous
+  // Terminal's high ctx% into brand-new windows (should show 0% / idle).
+  const idleSingle = "窗 ░░░░░░░░░░ 0% · —";
   // Up to 3 status rows in the SAME terminal window
   const statusLines = Math.max(
     1,
@@ -91,15 +112,20 @@ export function tmuxStatusCommands(grokHome = defaultGrokHome()): string[][] {
       "set",
       "-g",
       "status-format[0]",
-      `#[align=left]#(cat ${scopedSingle} 2>/dev/null || cat ${fallbackSingle} 2>/dev/null)`,
+      `#[align=left]#(cat ${scopedSingle} 2>/dev/null || printf '%s' '${idleSingle}')`,
     ]);
   } else {
     for (let i = 0; i < statusLines; i++) {
+      // Line 0 gets idle placeholder; other rows blank when scoped missing
+      const idle =
+        i === 0
+          ? `printf '%s' '${idleSingle}'`
+          : `printf ''`;
       cmds.push([
         "set",
         "-g",
         `status-format[${i}]`,
-        `#[align=left]#(sed -n '${i + 1}p' ${scopedLines} 2>/dev/null || sed -n '${i + 1}p' ${fallbackLines} 2>/dev/null)`,
+        `#[align=left]#(sed -n '${i + 1}p' ${scopedLines} 2>/dev/null || ${idle})`,
       ]);
     }
   }
@@ -180,22 +206,14 @@ export function execGrokInSameWindowTmux(options: {
 
   const instDir = hudTmuxDir(session, grokHome);
   fs.mkdirSync(instDir, { recursive: true });
-  const statusFile = path.join(instDir, "tmux-status.txt");
-  if (!fs.existsSync(statusFile)) {
-    fs.writeFileSync(statusFile, "ctx … · quota …\n", "utf8");
-  }
-  // Also ensure global fallback placeholders
-  fs.mkdirSync(path.join(grokHome, "hud"), { recursive: true });
-  const globalStatus = path.join(grokHome, "hud", "tmux-status.txt");
-  if (!fs.existsSync(globalStatus)) {
-    fs.writeFileSync(globalStatus, "ctx … · quota …\n", "utf8");
-  }
+  // Seed THIS tmux only with ctx 0% — never copy global / previous window state
+  seedIdleTmuxStatus(instDir);
 
   writeTmuxInstanceMeta({
     tmuxSession: session,
     launcherPid: process.pid,
     startedAt: new Date().toISOString(),
-    tty: process.env.TTY ?? null,
+    tty: process.env.TTY ?? detectControllingTtyPath() ?? null,
   }, grokHome);
   writeTmuxConfFile(grokHome);
 

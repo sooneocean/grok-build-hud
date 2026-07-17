@@ -18,7 +18,7 @@ import {
 } from "./session.js";
 import { getCreditUsage } from "./billing.js";
 import { writeStatusFiles, formatCompactLine } from "./status.js";
-import { findTmuxSessionForPid } from "./multi-session.js";
+import { resolveTmuxSessionForGrok } from "./multi-session.js";
 import type { SessionSnapshot, UsageSnapshot } from "./types.js";
 
 export function dashboardPidPath(grokHome = defaultGrokHome()): string {
@@ -178,17 +178,17 @@ export async function refreshDashboard(options: {
     /* ignore */
   }
 
-  // Write per-tmux-session status so each Terminal bar shows ITS own Grok
-  // Layout adapts to each window's client width.
+  // Write per-tmux-session status so each Terminal bar shows ITS own Grok.
+  // New windows are seeded at ctx 0% and never read global status (tmux-hud).
   for (const snap of targets) {
-    const tmuxSession = findTmuxSessionForPid(snap.pid);
+    const tmuxSession = resolveTmuxSessionForGrok(snap.pid, grokHome);
     const tty = ttyForPid(snap.pid);
     const isPrimary =
       primary != null && snap.sessionId === primary.sessionId;
     writeStatusFiles(snap, usage, grokHome, {
       tmuxSession,
       ttyPath: tty,
-      // Only primary overwrites global status.* (hooks / grok-hud status)
+      // Only primary overwrites global status.* (hooks / grok-hud status CLI)
       writeGlobal: isPrimary || targets.length === 1,
     });
 
@@ -202,7 +202,7 @@ export async function refreshDashboard(options: {
   // If somehow no primary write happened, write one
   if (primary && !targets.some((t) => t.sessionId === primary!.sessionId)) {
     writeStatusFiles(primary, usage, grokHome, {
-      tmuxSession: findTmuxSessionForPid(primary.pid),
+      tmuxSession: resolveTmuxSessionForGrok(primary.pid, grokHome),
       writeGlobal: true,
     });
   }

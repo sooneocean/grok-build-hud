@@ -96,6 +96,10 @@ export function parseTimeMs(value?: string | null): number {
  * After /new, both old and new Grok processes can stay live; array order in
  * active_sessions.json is insertion order (oldest first), so we must rank by
  * activity — not by list position.
+ *
+ * IMPORTANT: do NOT rank by signals.json mtime alone. An older live session
+ * keeps rewriting signals while a brand-new Terminal is still at ctx 0%, and
+ * that made the HUD "stick" on the old high context.
  */
 export function sessionRecencyMs(
   session: SessionSnapshot,
@@ -105,13 +109,19 @@ export function sessionRecencyMs(
   const lastActive = parseTimeMs(session.summary?.last_active_at);
   const updated = parseTimeMs(session.summary?.updated_at);
   const created = parseTimeMs(session.summary?.created_at);
+  // User-facing activity only (not signals keepalive rewrites)
+  const semantic = Math.max(opened, lastActive, updated, created);
   const fileM = Math.max(
-    mtimeMs(path.join(session.sessionDir, "signals.json")),
     mtimeMs(path.join(session.sessionDir, "summary.json")),
     mtimeMs(path.join(session.sessionDir, "updates.jsonl")),
     mtimeMs(path.join(session.sessionDir, "chat_history.jsonl")),
   );
-  return Math.max(opened, lastActive, updated, created, fileM);
+  // Prefer semantic timestamps; use file mtime only as a weak boost when
+  // semantic exists (never let signals-only rewrites dominate).
+  if (semantic > 0) {
+    return Math.max(semantic, fileM);
+  }
+  return fileM;
 }
 
 /** live first, then most recently active. */
@@ -136,6 +146,10 @@ export function sortSessionsByRecency(
 /**
  * Prefer the newest live session among active_sessions.
  * Fixes HUD stuck on an older tab's ctx% after the user runs /new.
+ *
+ * When several sessions are live, break ties with opened_at (newest Terminal
+ * /newest /new wins) so a brand-new window at ctx 0% is not displaced by an
+ * older busy session that still rewrites signals.
  */
 export function pickFromActiveSessions(
   grokHome: string,
@@ -162,10 +176,52 @@ export function pickFromActiveSessions(
 
   const ranked = sortSessionsByRecency(snaps, active);
   if (options.preferLive !== false) {
-    const live = ranked.find((s) => s.live);
-    if (live) return live;
+    const live = ranked.filter((s) => s.live);
+    if (live.length === 1) return live[0]!;
+    if (live.length > 1) {
+      // Newest open wins among live (new window / /new)
+      return [...live].sort((a, b) => {
+        const ae = active.find((x) => x.session_id === a.sessionId);
+        const be = active.find((x) => x.session_id === b.sessionId);
+        const ao = parseTimeMs(ae?.opened_at);
+        const bo = parseTimeMs(be?.opened_at);
+        if (ao !== bo) return bo - ao;
+        return sessionRecencyMs(b, be) - sessionRecencyMs(a, ae);
+      })[0]!;
+    }
   }
   return ranked[0] ?? null;
+}
+
+/** Minimal snapshot for a brand-new Terminal (ctx 0%, no session yet). */
+export function emptySessionSnapshot(
+  overrides: Partial<SessionSnapshot> = {},
+): SessionSnapshot {
+  return {
+    sessionId: "—",
+    sessionDir: "",
+    cwd: "",
+    model: "—",
+    live: false,
+    contextPercent: 0,
+    contextTokensUsed: 0,
+    contextWindowTokens: 0,
+    turnCount: 0,
+    userMessageCount: 0,
+    toolCallCount: 0,
+    toolFailureCount: 0,
+    errorCount: 0,
+    durationSeconds: 0,
+    agentLinesAdded: 0,
+    agentLinesRemoved: 0,
+    compactionCount: 0,
+    avgTtftMs: 0,
+    tools: [],
+    agents: [],
+    todos: [],
+    signals: {},
+    ...overrides,
+  };
 }
 
 export function loadSnapshotFromDir(

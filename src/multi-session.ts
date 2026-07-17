@@ -163,6 +163,70 @@ export function findTmuxSessionForPid(grokPid?: number): string | null {
   return null;
 }
 
+/** tty device base for a pid (e.g. ttys012), or null. */
+export function ttyBaseForPid(pid?: number): string | null {
+  if (!pid || pid <= 0) return null;
+  try {
+    const out = execFileSync("ps", ["-p", String(pid), "-o", "tty="], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 1000,
+    }).trim();
+    if (!out || out === "??" || out === "-") return null;
+    return out.replace(/^\/dev\//, "");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve tmux session for a live Grok process.
+ * 1) process tree → pane
+ * 2) meta.json launcherPid / tty match (set at `grok` wrap time)
+ * Never invent a name — caller must treat null as "do not write global for this".
+ */
+export function resolveTmuxSessionForGrok(
+  grokPid?: number,
+  grokHome = defaultGrokHome(),
+): string | null {
+  const byTree = findTmuxSessionForPid(grokPid);
+  if (byTree) return byTree;
+
+  if (!grokPid || grokPid <= 0) return null;
+
+  const tty = ttyBaseForPid(grokPid);
+  const root = path.join(grokHome, "hud", "tmux");
+  if (!fs.existsSync(root)) return null;
+
+  try {
+    for (const name of fs.readdirSync(root)) {
+      const metaPath = path.join(root, name, "meta.json");
+      if (!fs.existsSync(metaPath)) continue;
+      let meta: TmuxInstanceMeta;
+      try {
+        meta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as TmuxInstanceMeta;
+      } catch {
+        continue;
+      }
+      if (meta.launcherPid && isInProcessTree(grokPid, meta.launcherPid)) {
+        return meta.tmuxSession || name;
+      }
+      if (meta.launcherPid === grokPid) {
+        return meta.tmuxSession || name;
+      }
+      if (tty && meta.tty) {
+        const mt = meta.tty.replace(/^\/dev\//, "");
+        if (mt && (tty === mt || tty.endsWith(mt) || mt.endsWith(tty))) {
+          return meta.tmuxSession || name;
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 /** List instance dirs under hud/tmux/ that look like our sessions. */
 export function listHudTmuxSessions(grokHome = defaultGrokHome()): string[] {
   const root = path.join(grokHome, "hud", "tmux");
