@@ -46,22 +46,23 @@ node bin/grok-build-hud.js --preset full
 echo "==> [5/5] 注册为 Grok 插件 (commands / skills / hooks)"
 if command -v grok >/dev/null 2>&1; then
   # Prefer enable after install; re-run is ok for updates
-  if grok plugin install . --trust 2>&1; then
+  # Use absolute path (no trailing /.) so installed-plugins id stays stable
+  if grok plugin install "$ROOT" --trust 2>&1; then
     grok plugin enable grok-build-hud 2>/dev/null || true
     echo "    插件已安装: grok-build-hud"
-    if grok plugin validate . >/dev/null 2>&1; then
+    if grok plugin validate "$ROOT" >/dev/null 2>&1; then
       echo "    plugin validate: ok"
     else
-      echo "    warn: plugin validate 未通过（可稍后手动: grok plugin validate .）" >&2
+      echo "    warn: plugin validate 未通过（可稍后手动: grok plugin validate \"$ROOT\"）" >&2
     fi
   else
     echo "    warn: grok plugin install 失败 — 可稍后手动:" >&2
-    echo "      cd \"$ROOT\" && grok plugin install . --trust && grok plugin enable grok-build-hud" >&2
+    echo "      grok plugin install \"$ROOT\" --trust && grok plugin enable grok-build-hud" >&2
   fi
 else
   echo "    warn: 未找到 grok CLI，跳过插件注册" >&2
   echo "    安装 Grok Build 后执行:" >&2
-  echo "      cd \"$ROOT\" && grok plugin install . --trust && grok plugin enable grok-build-hud" >&2
+  echo "      grok plugin install \"$ROOT\" --trust && grok plugin enable grok-build-hud" >&2
 fi
 
 echo ""
