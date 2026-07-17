@@ -1,5 +1,5 @@
 {
-  "description": "Live context/tool HUD annotations while you use Grok Build",
+  "description": "grok-build-hud: live context/quota/token annotations in Grok Build scrollback",
   "hooks": {
     "SessionStart": [
       {

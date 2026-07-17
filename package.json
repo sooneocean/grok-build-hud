@@ -1,7 +1,7 @@
 {
   "name": "grok-build-hud",
-  "version": "0.3.10",
-  "description": "Grok Build 实时多行状态条：上下文、配额、入出缓存 token、工具与待办；同窗口 tmux、主题跟随、中英文 UI",
+  "version": "0.3.11",
+  "description": "Grok Build 插件：同窗口实时状态条（上下文、配额、token、工具与待办）；plugin + CLI + tmux HUD",
   "type": "module",
   "main": "dist/src/index.js",
   "bin": {
@@ -41,6 +41,7 @@
     "grok",
     "xai",
     "grok-build",
+    "plugin",
     "hud",
     "statusline",
     "tmux",
@@ -49,7 +50,7 @@
     "quota",
     "tokens"
   ],
-  "author": "dex",
+  "author": "Redredchen01",
   "license": "MIT",
   "repository": {
     "type": "git",

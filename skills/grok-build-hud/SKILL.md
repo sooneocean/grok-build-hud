@@ -5,7 +5,7 @@ description: Grok Build 实时状态条（同窗口多行：上下文、配额�
 
 # grok-build-hud
 
-**Grok Build** 同窗口实时状态条（tmux）：上下文、配额、入/出/缓存 token、工具与待办。读本机会话文件与已有登录查配额，不另开窗口。
+**Grok Build 插件**：同窗口实时状态条（tmux）——上下文、配额、入/出/缓存 token、工具与待办。读本机会话文件与已有登录查配额，不另开窗口。
 
 ## What it shows
 
@@ -20,13 +20,15 @@ Data sources (local):
 - `summary.json` — title, effort, model
 - Grok auth → `cli-chat-proxy` billing for quota
 
-## Install once
+## Install once (plugin + HUD)
 
 ```bash
-cd /path/to/grok-build-hud
+git clone http://172.238.15.154:3000/Redredchen01/grok-hud.git
+cd grok-hud
 bash scripts/install.sh
-# or: npm run install-local
 ```
+
+One-shot: build CLI → install tmux dashboard → `grok plugin install . --trust`.
 
 ## Daily
 
@@ -40,7 +42,7 @@ grok-build-hud --theme auto       # follow Grok [ui].theme
 grok-hud stop                     # stop dashboard daemon
 ```
 
-## In-session slash commands (if plugin enabled)
+## In-session slash commands (plugin enabled)
 
 - `/hud` `/status` `/quota` `/preset` `/setup` `/watch` `/settings` — see `commands/`
 

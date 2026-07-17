@@ -1,12 +1,12 @@
 {
   "name": "grok-build-hud-local",
-  "description": "Local marketplace entry for grok-build-hud",
-  "owner": { "name": "sooneocean" },
+  "description": "Local marketplace entry for the grok-build-hud Grok plugin",
+  "owner": { "name": "Redredchen01" },
   "plugins": [
     {
       "name": "grok-build-hud",
       "source": { "type": "local", "path": ".." },
-      "description": "Claude-HUD-style live status HUD for Grok Build",
+      "description": "Grok Build live multi-line status strip (context, quota, tokens, tools) — same-window tmux HUD",
       "category": "monitoring"
     }
   ]

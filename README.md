@@ -1,6 +1,6 @@
-# grok-hud
+# grok-build-hud
 
-**[Grok Build](https://x.ai/cli) 实时多行状态条**
+**Grok Build 官方插件格式的实时状态条**
 
 > English: [README.en.md](./README.en.md)
 
@@ -22,23 +22,39 @@ Grok 4.5 · AI FILM SPACE/0717 · ●
 | 多终端 | 每个标签页**独立** session，互不串线 |
 | 语言 | 默认**简体中文**，可切英文 / 繁體 |
 
-仓库：http://172.238.15.154:3000/Redredchen01/grok-hud
+仓库：http://172.238.15.154:3000/Redredchen01/grok-hud  
+插件名：`grok-build-hud` · 版本见 [`plugin.json`](./plugin.json)
+
+---
+
+## 这是什么
+
+| 层级 | 说明 |
+|------|------|
+| **交付形态** | **Grok 插件**（`plugin.json` + `commands/` + `skills/` + `hooks/`） |
+| **运行时** | Node CLI（`grok-hud` / `grok-build-hud`）+ **同窗口 tmux 状态条** |
+| **Skill** | 插件内附带，方便会话里被 agent 识别与调用 |
+
+**一句话：** 给 Grok Build 用的底部状态栏——上下文、配额、token、工具与待办，一眼看到。
 
 ---
 
 ## 目录
 
 1. [依赖](#依赖)
-2. [安装](#安装)
-3. [日常使用](#日常使用)
-4. [设定（语言 / 预设）](#设定语言--预设)
-5. [状态条说明](#状态条说明)
-6. [配置](#配置)
-7. [主题](#主题)
-8. [工作原理](#工作原理)
-9. [卸载](#卸载)
-10. [常见问题](#常见问题)
-11. [开发](#开发)
+2. [安装（推荐一键）](#安装推荐一键)
+3. [安装拆解](#安装拆解)
+4. [日常使用](#日常使用)
+5. [会话内斜杠命令](#会话内斜杠命令)
+6. [设定（语言 / 预设）](#设定语言--预设)
+7. [状态条说明](#状态条说明)
+8. [配置](#配置)
+9. [主题](#主题)
+10. [插件结构](#插件结构)
+11. [工作原理](#工作原理)
+12. [卸载](#卸载)
+13. [常见问题](#常见问题)
+14. [开发](#开发)
 
 ---
 
@@ -46,16 +62,17 @@ Grok 4.5 · AI FILM SPACE/0717 · ●
 
 | 依赖 | 说明 |
 |------|------|
+| **Grok Build** | 已安装 CLI，并 `grok login` |
 | **Node.js 18+** | `node -v` |
-| **tmux** | macOS：`brew install tmux` |
-| **Grok Build** | 已登录：`grok login` |
-| 终端 | Terminal / iTerm 等（在 tmux 内运行即可） |
+| **npm** | 随 Node 安装 |
+| **tmux** | 同窗口 HUD 必需；macOS：`brew install tmux` |
+| 终端 | Terminal / iTerm 等 |
 
 ---
 
-## 安装
+## 安装（推荐一键）
 
-### 方式 A：从 Gitea 克隆（推荐）
+从 Gitea 克隆后执行安装脚本：**编译 CLI → 装 tmux 状态条 → 注册为 Grok 插件**。
 
 ```bash
 git clone http://172.238.15.154:3000/Redredchen01/grok-hud.git
@@ -63,28 +80,23 @@ cd grok-hud
 bash scripts/install.sh
 ```
 
-会自动：`npm install` → 编译 → `npm link` → 装 dashboard / hooks → 主题跟随 → 预设 full → 语言中文。
+脚本会依次：
 
-### 方式 B：已有源码目录
+1. `npm install` + `npm run build`
+2. `npm link`（`grok-hud` / `grok-build-hud` 进 PATH）
+3. `--install-dashboard`（hooks + tmux 多行状态条 + `grok` wrapper）
+4. 主题跟随 + 预设 `full`
+5. `grok plugin install . --trust` 并 `enable`（若本机有 `grok`）
 
-```bash
-cd /path/to/grok-hud
-bash scripts/install.sh
-# 或：
-npm install && npm run build && npm link
-npm run install-local
-```
-
-### 方式 C：作为 Grok 插件（可选）
+完成后：
 
 ```bash
-cd /path/to/grok-hud
-npm install && npm run build
-grok plugin install . --trust
-grok plugin enable grok-build-hud
+grok                 # 同窗口底部出现状态条
+grok-hud status      # 打印一次完整状态
+grok-hud settings    # 语言 / 预设 / 行数
 ```
 
-在 Grok 内执行 `/hooks` 后按 `r` 重载 hooks。
+在 Grok 内执行 `/hooks` 后按 `r` 重载 hooks（若提示未加载）。
 
 ### 命令找不到时
 
@@ -94,12 +106,51 @@ grok plugin enable grok-build-hud
 export PATH="$(npm prefix -g)/bin:$HOME/.local/bin:$PATH"
 ```
 
-然后：
+然后 `source ~/.zshrc`，再 `which grok-hud`。
+
+---
+
+## 安装拆解
+
+只想分步做时：
+
+### 1）仅 CLI + 同窗口状态条（无心功能）
 
 ```bash
-source ~/.zshrc
-which grok-hud
+cd /path/to/grok-hud
+npm install && npm run build && npm link
+npm run install-local
+# 等价于：--install-dashboard + --theme auto + --preset full
 ```
+
+### 2）注册为 Grok 插件（斜杠命令 + skill + session hooks）
+
+须先完成编译（插件 hooks 依赖 `dist/`）：
+
+```bash
+cd /path/to/grok-hud
+npm install && npm run build
+grok plugin install . --trust
+grok plugin enable grok-build-hud
+```
+
+校验：
+
+```bash
+grok plugin validate .
+grok plugin details grok-build-hud
+```
+
+### 3）从本机已有源码目录更新
+
+```bash
+cd /path/to/grok-hud
+git pull
+bash scripts/install.sh
+# 或：grok plugin update grok-build-hud
+```
+
+> **注意：** 只装插件、不跑 `install-dashboard` 时，会话里会有 `/hud` 等命令与 scrollback 注解，但**不会**出现底部多行 tmux 状态条。完整体验请用一键 `install.sh`。
 
 ---
 
@@ -126,6 +177,33 @@ grok-hud-run
 
 ---
 
+## 会话内斜杠命令
+
+插件启用后，在 Grok 会话中可用：
+
+| 命令 | 作用 |
+|------|------|
+| `/hud` | 状态条相关说明 |
+| `/status` | 打印当前状态 |
+| `/quota` | 配额相关 |
+| `/preset` | 切换 full / essential / minimal |
+| `/settings` | 语言、预设、行数 |
+| `/setup` | 安装 / 修复 dashboard |
+| `/watch` | 保持 HUD 实时更新说明 |
+
+也可在 shell：
+
+```bash
+grok-hud status
+grok-hud settings
+grok-hud lang zh|en|tw
+grok-build-hud --preset full|essential|minimal
+grok-build-hud --theme auto
+grok-hud stop
+```
+
+---
+
 ## 设定（语言 / 预设）
 
 ```bash
@@ -137,15 +215,6 @@ grok-hud lang zh    # 简体中文（默认）
 grok-hud lang en    # English
 grok-hud lang tw    # 繁體中文
 ```
-
-| 命令 | 作用 |
-|------|------|
-| `grok-hud status` | 打印当前完整状态一次 |
-| `grok-hud stop` | 停后台刷新 |
-| `grok-build-hud --preset full` | 三行全开（默认） |
-| `grok-build-hud --preset essential` | 两行 |
-| `grok-build-hud --preset minimal` | 一行 |
-| `grok-build-hud --theme auto` | 跟随 Grok 主题（推荐） |
 
 改完配置后若条未变，在 tmux 内：
 
@@ -166,8 +235,7 @@ tmux source-file ~/.grok/hud/tmux.conf && tmux refresh-client -S
 中文标签：`窗 / 额 / 入 / 出 / 缓 / 思 / 轮 / 具`  
 英文标签：`ctx / use / i / o / c / r / t / ⚙`  
 
-宽度会随窗口自适应：窄窗自动减行、丢次要字段，避免挤出屏外。
-
+宽度会随窗口自适应：窄窗自动减行、丢次要字段，避免挤出屏外。  
 会话开启时约每秒刷新。
 
 ---
@@ -187,6 +255,7 @@ tmux source-file ~/.grok/hud/tmux.conf && tmux refresh-client -S
 - `language`：`zh-Hans`（默认）/ `en` / `zh-Hant`
 - `bold: true` — 粗体数值
 - `barWidth: 14` — 进度条宽度  
+
 字号由 Terminal 字体决定，状态栏无法单独放大。
 
 ---
@@ -211,6 +280,37 @@ grok-build-hud --theme auto
 
 ---
 
+## 插件结构
+
+本仓库按 Grok 插件清单组织，可直接 `grok plugin install .`：
+
+```text
+grok-hud/                      # Gitea 仓库目录名
+├── plugin.json                # 插件清单（name / commands / skills / hooks）
+├── .grok-plugin/
+│   └── marketplace.json       # 本地 marketplace 元数据
+├── commands/                  # 会话斜杠命令（/hud /status /settings …）
+├── skills/
+│   └── grok-build-hud/        # Agent 可触发的 skill 说明
+├── hooks/
+│   └── hooks.json             # SessionStart / PostToolUse 等注解
+├── bin/                       # CLI 入口
+├── src/                       # TypeScript 源码
+├── scripts/install.sh         # 一键：CLI + dashboard + 插件
+├── README.md                  # 中文主文档（本文件）
+└── README.en.md
+```
+
+| 组件 | 路径 | 作用 |
+|------|------|------|
+| Manifest | `plugin.json` | 插件名、版本、组件入口 |
+| Commands | `commands/*.md` | Grok 内 `/…` 命令 |
+| Skills | `skills/*/SKILL.md` | 会话技能描述 |
+| Hooks | `hooks/hooks.json` | 会话生命周期注解 |
+| CLI / HUD | `bin/` + `src/` | 真正画状态条与查配额 |
+
+---
+
 ## 工作原理
 
 1. 读本机 `~/.grok/sessions/**`（signals / updates / summary）  
@@ -225,9 +325,15 @@ grok-build-hud --theme auto
 ## 卸载
 
 ```bash
+# 状态条 + shell hooks
 grok-build-hud --uninstall-dashboard
 grok-build-hud --uninstall-hooks
-npm unlink -g grok-build-hud   # 若用过 npm link
+
+# Grok 插件
+grok plugin uninstall grok-build-hud
+
+# CLI（若用过 npm link）
+npm unlink -g grok-build-hud
 ```
 
 可选删除：`~/.grok/hud/`、`~/.grok/hooks/grok-build-hud.json`。
@@ -239,12 +345,15 @@ npm unlink -g grok-build-hud   # 若用过 npm link
 | 现象 | 处理 |
 |------|------|
 | `command not found` | 检查 PATH；或 `node bin/grok-hud.js status` |
-| 底部没有状态条 | 用 `grok` 启动；已装 tmux；执行 `--install-dashboard` |
+| 底部没有状态条 | 用 `grok` 启动；已装 tmux；执行 `bash scripts/install.sh` 或 `--install-dashboard` |
+| 只有斜杠命令没有底栏 | 只装了插件；请再跑 dashboard 安装 |
+| 插件未出现 | `grok plugin list`；`grok plugin enable grok-build-hud`；`/hooks` → `r` |
 | 配额显示 `—` | 先 `grok login`，再 `grok-hud status` |
 | 颜色不对 | `grok-build-hud --theme auto`，与 Grok 主题一致 |
 | 状态不更新 | `grok-hud stop` 后重新 `grok` |
-| 多终端串会话 | 更新到新版；每标签独立 `grok`，勿共用旧 `grok-hud` tmux 名 |
+| 多终端串会话 | 更新到新版；每标签独立 `grok` |
 | 字太小 | 放大 Terminal 字体；保持 `bold` / `barWidth` |
+| `build missing` | `npm install && npm run build` 后再装插件 |
 
 ---
 
@@ -254,6 +363,7 @@ npm unlink -g grok-build-hud   # 若用过 npm link
 npm install
 npm test          # 编译 + 单元测试
 npm run build
+npm run plugin:validate   # 需本机有 grok CLI
 ```
 
 - Commit message 用英文  

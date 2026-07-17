@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.11
+
+### Docs / packaging
+- **Plugin-first positioning**: README / README.en present this as a **Grok plugin**
+  (manifest + commands + skills + hooks) with CLI/tmux as the runtime, not an
+  optional add-on.
+- **Install**: `scripts/install.sh` now registers the plugin via
+  `grok plugin install . --trust` + `enable` after building the dashboard.
+- Clarified plugin-only vs full HUD (dashboard) install paths; FAQ and
+  CONTRIBUTING / skill / setup command docs aligned.
+- Bump package + `plugin.json` to 0.3.11; marketplace description cleaned.
+
 ## 0.3.10
 
 ### Docs / repo
