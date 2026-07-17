@@ -30,8 +30,8 @@ Built for Grok Build sessions: context window, quota, **input/output/cache token
 ### A. One-shot script (recommended)
 
 ```bash
-git clone https://github.com/sooneocean/grok-build-hud.git
-cd grok-build-hud
+git clone http://172.238.15.154:3000/Redredchen01/grok-hud.git
+cd grok-hud
 bash scripts/install.sh
 ```
 
@@ -40,8 +40,8 @@ This runs `npm install` → `build` → `npm link` → dashboard + hooks → `--
 ### B. Manual steps
 
 ```bash
-git clone https://github.com/sooneocean/grok-build-hud.git
-cd grok-build-hud
+git clone http://172.238.15.154:3000/Redredchen01/grok-hud.git
+cd grok-hud
 npm install
 npm run build
 npm link          # puts grok-build-hud / grok-hud / grok-hud-run on PATH
@@ -51,7 +51,7 @@ npm run install-local
 ### C. From an already-cloned path
 
 ```bash
-cd /path/to/grok-build-hud
+cd /path/to/grok-hud
 bash scripts/install.sh
 ```
 

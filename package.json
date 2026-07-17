@@ -53,12 +53,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sooneocean/grok-build-hud.git"
+    "url": "http://172.238.15.154:3000/Redredchen01/grok-hud.git"
   },
   "bugs": {
-    "url": "https://github.com/sooneocean/grok-build-hud/issues"
+    "url": "http://172.238.15.154:3000/Redredchen01/grok-hud/issues"
   },
-  "homepage": "https://github.com/sooneocean/grok-build-hud#readme",
+  "homepage": "http://172.238.15.154:3000/Redredchen01/grok-hud",
   "devDependencies": {
     "@types/node": "^22.13.10",
     "typescript": "^5.8.2"

@@ -3,11 +3,10 @@
   "version": "0.3.9",
   "description": "Live multi-line status strip for Grok Build: context, quota, tokens, tools, todos, git",
   "author": {
-    "name": "sooneocean",
-    "email": "redredchen01@gmail.com"
+    "name": "Redredchen01"
   },
-  "homepage": "https://github.com/sooneocean/grok-build-hud",
-  "repository": "https://github.com/sooneocean/grok-build-hud",
+  "homepage": "http://172.238.15.154:3000/Redredchen01/grok-hud",
+  "repository": "http://172.238.15.154:3000/Redredchen01/grok-hud",
   "commands": "./commands",
   "skills": "./skills",
   "hooks": "./hooks/hooks.json"

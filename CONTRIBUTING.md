@@ -3,8 +3,8 @@
 ## Setup
 
 ```bash
-git clone https://github.com/sooneocean/grok-build-hud.git
-cd grok-build-hud
+git clone http://172.238.15.154:3000/Redredchen01/grok-hud.git
+cd grok-hud
 npm install
 npm test
 ```
