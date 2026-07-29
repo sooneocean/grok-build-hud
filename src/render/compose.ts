@@ -228,9 +228,12 @@ function buildProjectLine(
           ? truncateVisible(session.title, 36)
           : null;
       case "effort":
-        return session.reasoningEffort
-          ? `effort:${session.reasoningEffort}`
-          : null;
+        // D1: short chrome — no "effort:" noise under codex/dense
+        if (!session.reasoningEffort) return null;
+        if ((cfg.aesthetic ?? "classic") !== "classic") {
+          return session.reasoningEffort;
+        }
+        return `effort:${session.reasoningEffort}`;
       default:
         return null;
     }
@@ -311,9 +314,35 @@ function fragUsage(
         : usage.period
           ? ` ${usage.period === "weekly" ? L.weekly || "w" : usage.period}`
           : "";
-    return `${label} ${uBar}${valBit}${period}${abs}${reset}`;
+    let line = `${label} ${uBar}${valBit}${period}${abs}${reset}`;
+    // D1: product share rides on usage (tail), not a separate loud meta chip
+    if (d.showProductBreakdown && usage.message) {
+      const gb = productShare(usage.message);
+      if (gb) {
+        const mid = separatorString(cfg.separator).trim() || "·";
+        line += ` ${mid} ${gb}`;
+      }
+    }
+    return line;
   }
   return `${label} — ${usage.message ?? "n/a"}`;
+}
+
+function productShare(message: string): string | null {
+  const gb = message
+    .split(",")
+    .map((s) => s.trim())
+    .find((s) => /GrokBuild/i.test(s));
+  return gb ?? null;
+}
+
+/**
+ * Main health line priority (D1): context > usage > meta > tokens.
+ * codex/dense keep only context+usage on the eye line.
+ */
+function isMainSightOnly(cfg: HudDisplayConfig): boolean {
+  const a = cfg.aesthetic ?? "classic";
+  return a === "codex" || a === "dense" || cfg.density === "dense";
 }
 
 function fragMeta(
@@ -322,6 +351,10 @@ function fragMeta(
   cfg: HudDisplayConfig,
   L: HudStrings,
 ): string {
+  // Under main-sight aesthetics, meta is suppressed on the health line
+  // (product already on usage; time/turns are secondary noise).
+  if (isMainSightOnly(cfg)) return "";
+
   const d = cfg.display;
   const meta: string[] = [];
   if (d.showSessionTime && session.durationSeconds > 0) {
@@ -342,13 +375,7 @@ function fragMeta(
   ) {
     meta.push(`Δ +${session.agentLinesAdded}/-${session.agentLinesRemoved}`);
   }
-  if (d.showProductBreakdown && usage?.message) {
-    const gb = usage.message
-      .split(",")
-      .map((s) => s.trim())
-      .find((s) => /GrokBuild/i.test(s));
-    if (gb) meta.push(gb);
-  }
+  // product lives on usage line now — avoid duplicate
   return meta.join(separatorString(cfg.separator));
 }
 
@@ -453,16 +480,31 @@ export function composeHudLines(
     }
 
     // Merge consecutive elements that share the same merge group
-    const bits: string[] = [frag];
+    const items: { el: HudElement; text: string }[] = [{ el, text: frag }];
     let j = i + 1;
     while (j < order.length) {
       const next = order[j]!;
       if (groupIdOf(next, groups) !== gid) break;
       const nf = elementFragment(next, session, usage, cfg, L);
-      if (nf) bits.push(nf);
+      if (nf) items.push({ el: next, text: nf });
       j += 1;
     }
-    lines.push(bits.join(separatorString(cfg.separator)));
+    // D1 main sight: health group keeps context + usage only
+    const healthEls = new Set(["context", "usage", "tokens", "meta"]);
+    const isHealthGroup = items.some((x) => healthEls.has(x.el));
+    let texts = items.map((x) => x.text);
+    if (isHealthGroup && isMainSightOnly(cfg)) {
+      texts = items
+        .filter((x) => x.el === "context" || x.el === "usage")
+        .map((x) => x.text);
+    } else if (isHealthGroup && (cfg.aesthetic ?? "classic") === "classic") {
+      // classic: prefer context+usage first; drop tokens before meta if both present
+      // (tokens already gated by tokenRevealAtContextPercent)
+      texts = items.map((x) => x.text);
+    }
+    if (texts.length) {
+      lines.push(texts.join(separatorString(cfg.separator)));
+    }
     i = j;
   }
 

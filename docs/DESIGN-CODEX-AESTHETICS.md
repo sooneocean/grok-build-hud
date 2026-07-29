@@ -65,13 +65,13 @@ Codex App 像 **「安静的仪表」**：少色、轻分隔、状态才上色�
 - [x] settings 可切 aesthetic + 预览
 - [x] 测试 + CHANGELOG + 双推
 
-### Wave D1 — 信息层级与降噪（0.4.3）
+### Wave D1 — 信息层级与降噪（0.4.3）✅
 
-- [ ] Token 明细默认 **short**；`tokenRevealAtContextPercent`（默认 70）以下隐藏 exact 墙
-- [ ] 第 2 行「主健康」：只保证 窗+额；meta/TOK 按 width 丢弃优先级
-- [ ] effort / title 默认 essential 关（full 可开）
-- [ ] GrokBuild 占比仅在 usage 行尾 dim 显示，不抢主色
-- [ ] `showChrome: minimal` — 去掉多余 “effort:” 前缀噪音
+- [x] Token 明细 short + `tokenRevealAtContextPercent`（codex 70）
+- [x] 第 2 行「主健康」：codex/dense **只保 窗+额**；meta/TOK 不进主视线
+- [x] effort / title 默认 essential/codex 关；codex 下 effort 无 `effort:` 前缀
+- [x] GrokBuild 挂在 usage 行尾（不另占 meta 芯片）
+- [x] essential 预设对齐 compact middot + short tokens
 
 ### Wave D2 — 语义色与动效克制（0.4.4）
 

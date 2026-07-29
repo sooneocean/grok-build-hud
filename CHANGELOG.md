@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.3
+
+### Design aesthetics (Wave D1 — main-sight calm)
+- **Health line** under `codex` / `dense`: only **context + usage** (窗+额).
+  Meta (turns/tools/time/Δ) no longer crowds the primary glance row.
+- **GrokBuild share** attaches to the usage fragment tail (not a separate meta chip).
+- **Effort chrome**: under codex/dense show `high` instead of `effort:high`.
+- **essential preset**: middot + compact + short tokens + reveal gate 70 + no title/effort on identity line.
+- **codex aesthetic**: mergeGroups `[["context","usage"]]` only; statusLines 2.
+
 ## 0.4.2
 
 ### Design aesthetics (Codex App–inspired, Wave D0)

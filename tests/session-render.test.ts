@@ -4,6 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadSnapshotFromDir } from "../src/session.js";
 import { renderHud, renderTmux } from "../src/render.js";
+import { composeHudText } from "../src/render/compose.js";
+import { PRESET_FULL } from "../src/hud-config.js";
 import { contextPercentFromSignals } from "../src/bar.js";
 import type { UsageSnapshot } from "../src/types.js";
 
@@ -38,7 +40,8 @@ describe("session + render", () => {
       period: "weekly",
       message: "GrokBuild 9%",
     };
-    const text = renderHud(snap, usage, { color: false });
+    // Pin classic full config so machine ~/.grok/hud aesthetic doesn't affect tests
+    const text = composeHudText(snap, usage, PRESET_FULL);
     assert.match(text, /ctx|Context|窗/);
     assert.match(text, /37%/);
     assert.match(text, /190k\/500k|190\.0k\/500k/);
@@ -50,10 +53,10 @@ describe("session + render", () => {
 
   it("renders when usage unavailable without crash", () => {
     const snap = loadSnapshotFromDir(fixtureSession)!;
-    const text = renderHud(
+    const text = composeHudText(
       snap,
       { available: false, message: "usage unavailable" },
-      { color: false },
+      PRESET_FULL,
     );
     assert.match(text, /37%/);
     assert.match(text, /unavailable/i);

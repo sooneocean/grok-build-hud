@@ -192,6 +192,44 @@ describe("compose pipeline", () => {
     assert.equal(lines.length, 1);
     assert.match(lines[0]!, /37%/);
   });
+
+  it("codex health line is context+usage only (no turns/tools meta noise)", () => {
+    const snap = loadSnapshotFromDir(fixture)!;
+    snap.turnCount = 9;
+    snap.toolCallCount = 40;
+    snap.durationSeconds = 600;
+    const cfg = applyAesthetic("codex", {
+      ...PRESET_FULL,
+      language: "zh-Hans",
+      display: {
+        ...PRESET_FULL.display,
+        showTurns: true,
+        showTools: true,
+        showSessionTime: true,
+        showProductBreakdown: true,
+      },
+    });
+    const lines = composeHudLines(snap, usage, cfg);
+    assert.ok(lines.length >= 2);
+    // line 0 identity, line 1 health
+    const health = lines[1]!;
+    assert.match(health, /37%/);
+    assert.match(health, /22%/);
+    assert.doesNotMatch(health, /轮9|t9|具40|⚙40|10m/);
+    // product share may trail usage
+    assert.match(health, /GrokBuild/);
+  });
+
+  it("codex effort has no effort: prefix when shown", () => {
+    const snap = loadSnapshotFromDir(fixture)!;
+    snap.reasoningEffort = "high";
+    const cfg = applyAesthetic("codex", PRESET_FULL);
+    // force effort segment
+    cfg.projectLineOrder = ["model", "project", "live", "effort"];
+    const text = composeHudText(snap, usage, cfg);
+    assert.match(text, /\bhigh\b/);
+    assert.doesNotMatch(text, /effort:high/);
+  });
 });
 
 describe("visual width + label align", () => {

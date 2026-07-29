@@ -320,6 +320,8 @@ function printFrame(
     return;
   }
   const list = opts.all ? sessions : [sessions[0]!];
+  const grokHome = opts.grokHome ?? defaultGrokHome();
+  const hudCfg = loadHudConfig(grokHome);
   const chunks: string[] = [];
   for (const s of list) {
     if (opts.json) {
@@ -329,9 +331,11 @@ function printFrame(
         renderHud(s, usage, {
           color: !opts.noColor && !opts.tmux,
           tmux: opts.tmux,
-          pathLevels: cfg.pathLevels,
-          warningThreshold: cfg.warningThreshold,
-          criticalThreshold: cfg.criticalThreshold,
+          pathLevels: hudCfg.pathLevels ?? cfg.pathLevels,
+          warningThreshold: hudCfg.warningThreshold ?? cfg.warningThreshold,
+          criticalThreshold: hudCfg.criticalThreshold ?? cfg.criticalThreshold,
+          grokHome,
+          cfg: hudCfg,
         }),
       );
     }

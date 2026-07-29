@@ -187,7 +187,11 @@ export const PRESET_ESSENTIAL: HudDisplayConfig = {
   preset: "essential",
   statusLines: 2,
   bold: true,
-  barWidth: 14,
+  barWidth: 12,
+  density: "compact",
+  separator: "middot",
+  tokenRevealAtContextPercent: 70,
+  projectLineOrder: ["model", "project", "live"],
   elementOrder: [
     "project",
     "context",
@@ -196,9 +200,10 @@ export const PRESET_ESSENTIAL: HudDisplayConfig = {
     "agents",
     "todos",
   ],
+  mergeGroups: [["context", "usage"]],
   display: {
     ...PRESET_FULL.display,
-    showProductBreakdown: false,
+    showProductBreakdown: true,
     showTodos: true,
     showAgents: true,
     showDiffStats: false,
@@ -207,7 +212,7 @@ export const PRESET_ESSENTIAL: HudDisplayConfig = {
     usageValue: "percent",
     showTokenBreakdown: true,
     tokenScope: "last",
-    tokenDigits: "exact",
+    tokenDigits: "short",
     showSessionTime: false,
     showTurns: false,
     showTools: false,
@@ -538,7 +543,7 @@ export function applyAesthetic(
     };
   }
 
-  // codex — recommended calm strip
+  // codex — recommended calm strip (D1: health line = 窗+额 only)
   return {
     ...root,
     language: lang,
@@ -555,12 +560,11 @@ export function applyAesthetic(
       "project",
       "context",
       "usage",
-      "meta",
       "tools",
       "agents",
       "todos",
     ],
-    mergeGroups: [["context", "usage", "meta"]],
+    mergeGroups: [["context", "usage"]],
     display: {
       ...root.display,
       contextValue: "percent",
@@ -574,6 +578,7 @@ export function applyAesthetic(
       showTurns: false,
       showTools: false,
       showDiffStats: false,
+      showErrors: false,
       showToolActivity: true,
       showAgents: true,
       showTodos: true,

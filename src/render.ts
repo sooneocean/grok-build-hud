@@ -4,7 +4,10 @@
  * applies optional ANSI color and thin tmux one-liners.
  */
 import { projectLabel, renderBar } from "./bar.js";
-import { loadHudConfig, type HudDisplayConfig } from "./hud-config.js";
+import {
+  loadHudConfig,
+  type HudDisplayConfig,
+} from "./hud-config.js";
 import {
   composeHudText,
   displayModel,
@@ -14,6 +17,12 @@ import type {
   SessionSnapshot,
   UsageSnapshot,
 } from "./types.js";
+
+export type RenderHudOptions = Partial<RenderOptions> & {
+  /** Pin display config (tests / CLI with --grok-home). */
+  cfg?: HudDisplayConfig;
+  grokHome?: string;
+};
 
 const ANSI = {
   reset: "\x1b[0m",
@@ -40,16 +49,16 @@ function severityColor(percent: number, opts: RenderOptions): string {
   return ANSI.green;
 }
 
-function cfgFromRenderOpts(opts: RenderOptions): HudDisplayConfig {
-  const base = loadHudConfig();
+function cfgFromRenderOpts(opts: RenderHudOptions): HudDisplayConfig {
+  const base = opts.cfg ?? loadHudConfig(opts.grokHome);
   return {
     ...base,
     pathLevels: (opts.pathLevels === 1 || opts.pathLevels === 2 || opts.pathLevels === 3
       ? opts.pathLevels
       : base.pathLevels) as 1 | 2 | 3,
     lineLayout: opts.compact ? "compact" : base.lineLayout,
-    warningThreshold: opts.warningThreshold,
-    criticalThreshold: opts.criticalThreshold,
+    warningThreshold: opts.warningThreshold ?? base.warningThreshold,
+    criticalThreshold: opts.criticalThreshold ?? base.criticalThreshold,
   };
 }
 
@@ -60,7 +69,7 @@ function cfgFromRenderOpts(opts: RenderOptions): HudDisplayConfig {
 export function renderHud(
   session: SessionSnapshot,
   usage: UsageSnapshot | null,
-  opts: Partial<RenderOptions> = {},
+  opts: RenderHudOptions = {},
 ): string {
   const options: RenderOptions = {
     color: opts.color ?? true,
@@ -75,7 +84,7 @@ export function renderHud(
     return renderTmux(session, usage, options);
   }
 
-  const cfg = cfgFromRenderOpts(options);
+  const cfg = cfgFromRenderOpts(opts);
   const plain = composeHudText(session, usage, cfg);
   if (!options.color) return plain;
 
