@@ -13,6 +13,7 @@ export type HudAesthetic = "classic" | "codex" | "dense";
 export type HudDensity = "comfortable" | "compact" | "dense";
 export type SeparatorStyle = "middot" | "pipe" | "space";
 export type BarStyle = "block" | "thin" | "dot";
+export type TimeFormatMode = "relative" | "absolute" | "both";
 
 /** Orderable body elements (Claude-HUD style). */
 export type HudElement =
@@ -95,6 +96,22 @@ export interface HudDisplayConfig {
     statusBg: string;
     statusFg: string;
   }>;
+  /**
+   * Usage reset display: relative countdown, wall clock, or both.
+   */
+  timeFormat?: TimeFormatMode;
+  /**
+   * Only apply warn/crit emphasis to usage when used% ≥ this (codex calm).
+   * Context always uses warningThreshold/criticalThreshold.
+   * Default 0 = always emphasize by ladder; codex uses 80.
+   */
+  usageEmphasisThreshold?: number;
+  /** Read usage from this sidecar JSON if billing misses (optional). */
+  externalUsagePath?: string;
+  /** Write billing usage snapshot here (absolute .json); default ~/.grok/hud/usage-sidecar.json */
+  externalUsageWritePath?: string;
+  /** Sidecar max age ms (default 300000). */
+  externalUsageFreshnessMs?: number;
   display: {
     showModel: boolean;
     showProject: boolean;
@@ -172,6 +189,8 @@ export const PRESET_FULL: HudDisplayConfig = {
   separator: "pipe",
   barStyle: "block",
   tokenRevealAtContextPercent: 0,
+  timeFormat: "relative",
+  usageEmphasisThreshold: 0,
   display: {
     showModel: true,
     showProject: true,
@@ -353,6 +372,8 @@ export function loadHudConfig(
       (base.projectLineOrder
         ? [...base.projectLineOrder]
         : [...DEFAULT_PROJECT_LINE_ORDER]);
+    const aesthetic = normalizeAesthetic(raw.aesthetic ?? base.aesthetic);
+    const calmAesthetic = aesthetic === "codex" || aesthetic === "dense";
     return {
       ...base,
       ...raw,
@@ -364,14 +385,16 @@ export function loadHudConfig(
       mergeGroups,
       projectLineOrder,
       alignLabels: raw.alignLabels ?? base.alignLabels ?? true,
-      aesthetic: normalizeAesthetic(raw.aesthetic ?? base.aesthetic),
+      aesthetic,
       density: normalizeDensity(raw.density ?? base.density),
       separator: normalizeSeparator(raw.separator ?? base.separator),
       barStyle: normalizeBarStyle(raw.barStyle ?? base.barStyle),
       tokenRevealAtContextPercent:
         typeof raw.tokenRevealAtContextPercent === "number"
           ? raw.tokenRevealAtContextPercent
-          : (base.tokenRevealAtContextPercent ?? 0),
+          : calmAesthetic
+            ? (base.tokenRevealAtContextPercent ?? 70)
+            : (base.tokenRevealAtContextPercent ?? 0),
       colors: {
         ...(base.colors ?? {}),
         ...((raw.colors as HudDisplayConfig["colors"]) ?? {}),
@@ -384,6 +407,22 @@ export function loadHudConfig(
         typeof raw.criticalThreshold === "number"
           ? raw.criticalThreshold
           : (base.criticalThreshold ?? 90),
+      timeFormat: normalizeTimeFormat(
+        raw.timeFormat ?? base.timeFormat ?? "relative",
+      ),
+      usageEmphasisThreshold:
+        typeof raw.usageEmphasisThreshold === "number"
+          ? raw.usageEmphasisThreshold
+          : calmAesthetic
+            ? 80
+            : (base.usageEmphasisThreshold ?? 0),
+      externalUsagePath: raw.externalUsagePath ?? base.externalUsagePath,
+      externalUsageWritePath:
+        raw.externalUsageWritePath ?? base.externalUsageWritePath,
+      externalUsageFreshnessMs:
+        typeof raw.externalUsageFreshnessMs === "number"
+          ? raw.externalUsageFreshnessMs
+          : (base.externalUsageFreshnessMs ?? 300_000),
       display: {
         ...base.display,
         ...(raw.display ?? {}),
@@ -434,6 +473,11 @@ function normalizeSeparator(v: unknown): SeparatorStyle {
 function normalizeBarStyle(v: unknown): BarStyle {
   if (v === "thin" || v === "dot" || v === "block") return v;
   return "block";
+}
+
+function normalizeTimeFormat(v: unknown): TimeFormatMode {
+  if (v === "absolute" || v === "both" || v === "relative") return v;
+  return "relative";
 }
 
 /** Ensure config exists with English default (idempotent). */
@@ -550,6 +594,8 @@ export function applyAesthetic(
       statusLines: 1,
       lineLayout: "compact",
       tokenRevealAtContextPercent: 85,
+      timeFormat: "relative",
+      usageEmphasisThreshold: 80,
       alignLabels: false,
       projectLineOrder: ["model", "project", "live"],
       elementOrder: ["project", "context", "usage", "tools"],
@@ -584,6 +630,8 @@ export function applyAesthetic(
     barWidth: 10,
     statusLines: 2,
     tokenRevealAtContextPercent: 70,
+    timeFormat: "relative",
+    usageEmphasisThreshold: 80,
     alignLabels: true,
     projectLineOrder: ["model", "project", "live"],
     elementOrder: [

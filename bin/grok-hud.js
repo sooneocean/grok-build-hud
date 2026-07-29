@@ -33,6 +33,8 @@ else if (head === "status" || head === undefined) {
   mapped = ["--install-dashboard"];
 } else if (head === "settings" || head === "config" || head === "设定" || head === "設置") {
   mapped = ["--settings", ...argv.slice(1)];
+} else if (head === "info") {
+  mapped = ["--info", ...argv.slice(1)];
 } else if (head === "lang" || head === "language" || head === "语言" || head === "語言") {
   mapped = ["--lang", argv[1] || "zh", ...argv.slice(2)];
 }

@@ -28,6 +28,7 @@ import type {
   TokenBreakdown,
   UsageSnapshot,
 } from "../types.js";
+import { formatResetFragment } from "../format-reset-time.js";
 import { alignedLabel } from "./label-align.js";
 import { truncateVisible } from "./width.js";
 
@@ -305,30 +306,38 @@ function fragUsage(
         ? ` ${formatTokenCount(usage.used)}/${formatTokenCount(usage.limit)}`
         : "";
     const mid = separatorString(cfg.separator).trim() || "·";
-    const reset = usage.resetsIn
-      ? ` ${mid} ${usage.resetsIn}${
-          (cfg.aesthetic ?? "classic") === "codex" ? "" : ` ${L.left}`
+    const resetFrag = formatResetFragment(
+      usage,
+      cfg.timeFormat ?? "relative",
+    );
+    const reset = resetFrag
+      ? ` ${mid} ${resetFrag}${
+          (cfg.aesthetic ?? "classic") === "codex" ||
+          (cfg.aesthetic ?? "classic") === "dense"
+            ? ""
+            : cfg.timeFormat === "absolute"
+              ? ""
+              : ` ${L.left}`
         }`
       : "";
     const val = usageValueText(usage, d.usageValue ?? "percent");
     const valBit =
       d.usageValue === "remaining" ? `${val} ${L.left}` : val;
+    // D4: classic comfortable keeps (weekly); codex/dense omit period when reset shown
+    const aesthetic = cfg.aesthetic ?? "classic";
     const period =
-      usage.period &&
-      (cfg.aesthetic ?? "classic") === "classic" &&
-      cfg.density === "comfortable"
+      usage.period && aesthetic === "classic" && cfg.density === "comfortable"
         ? ` (${usage.period})`
-        : usage.period
-          ? ` ${usage.period === "weekly" ? L.weekly || "w" : usage.period}`
-          : "";
+        : usage.period && aesthetic === "classic"
+          ? ` ${usage.period === "weekly" ? L.weekly || "w" : usage.period === "monthly" ? L.monthly || "m" : usage.period}`
+          : usage.period && !resetFrag
+            ? ` ${usage.period === "weekly" ? L.weekly || "w" : usage.period === "monthly" ? L.monthly || "m" : usage.period}`
+            : "";
     let line = `${label} ${uBar}${valBit}${period}${abs}${reset}`;
-    // D1: product share rides on usage (tail), not a separate loud meta chip
+    // D1: product share rides on usage (tail)
     if (d.showProductBreakdown && usage.message) {
       const gb = productShare(usage.message);
-      if (gb) {
-        const mid = separatorString(cfg.separator).trim() || "·";
-        line += ` ${mid} ${gb}`;
-      }
+      if (gb) line += ` ${mid} ${gb}`;
     }
     return line;
   }

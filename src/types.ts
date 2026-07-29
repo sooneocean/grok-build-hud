@@ -119,7 +119,10 @@ export interface UsageSnapshot {
   used?: number;
   limit?: number;
   period?: string;
+  /** Relative countdown e.g. "3h" */
   resetsIn?: string;
+  /** ISO timestamp for absolute reset wall-clock (optional). */
+  resetsAt?: string;
   message?: string;
   source?: string;
 }

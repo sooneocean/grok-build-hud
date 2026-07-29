@@ -128,8 +128,10 @@ export function normalizeBillingPayload(body: unknown): UsageSnapshot {
   const periodEnd =
     (asRecord(config.currentPeriod)?.end as string | undefined) ??
     (config.billingPeriodEnd as string | undefined) ??
-    (config.periodEnd as string | undefined);
+    (config.periodEnd as string | undefined) ??
+    (typeof config.reset_at === "string" ? config.reset_at : undefined);
   const resetsIn = formatResets(periodEnd ?? config.reset_at);
+  const resetsAt = absoluteResetIso(periodEnd ?? config.reset_at);
 
   if (percent == null && used == null && limit == null) {
     return {
@@ -146,6 +148,7 @@ export function normalizeBillingPayload(body: unknown): UsageSnapshot {
     limit: limit ?? undefined,
     period,
     resetsIn,
+    resetsAt,
     source: "billing",
     message: productBreakdown,
   };
@@ -177,9 +180,25 @@ export function mergeBillingSnapshots(
     limit: monthly.limit ?? credits.limit,
     period,
     resetsIn: credits.resetsIn ?? monthly.resetsIn,
+    resetsAt: credits.resetsAt ?? monthly.resetsAt,
     source: "billing",
     message: credits.message ?? monthly.message,
   };
+}
+
+function absoluteResetIso(v: unknown): string | undefined {
+  if (v == null) return undefined;
+  if (typeof v === "string") {
+    const t = Date.parse(v);
+    if (!Number.isNaN(t)) return new Date(t).toISOString();
+    return undefined;
+  }
+  if (typeof v === "number") {
+    const ms =
+      v > 1e12 ? v : v > 1e10 ? v : v > 1e9 ? v * 1000 : Date.now() + v * 1000;
+    return new Date(ms).toISOString();
+  }
+  return undefined;
 }
 
 function formatResets(v: unknown): string | undefined {
@@ -266,6 +285,16 @@ export async function getCreditUsage(
   const readAuth = deps.readAuth ?? readGrokAuth;
   const auth = readAuth(grokHome);
   if (!auth?.token) {
+    try {
+      const { readUsageSidecar } = await import("./usage-sidecar.js");
+      const side = readUsageSidecar(grokHome, { now });
+      if (side?.available) {
+        cache.set(cacheKey, { at: now, value: side });
+        return side;
+      }
+    } catch {
+      /* optional */
+    }
     const value: UsageSnapshot = {
       available: false,
       message: "usage unavailable (no auth)",
@@ -320,6 +349,12 @@ export async function getCreditUsage(
         if (n.available) {
           cache.set(cacheKey, { at: now, value: n });
           writeDiskCache(grokHome, n);
+          try {
+            const { writeUsageSidecar } = await import("./usage-sidecar.js");
+            writeUsageSidecar(grokHome, n);
+          } catch {
+            /* ignore */
+          }
           return n;
         }
       } catch {
@@ -329,8 +364,31 @@ export async function getCreditUsage(
   }
 
   const value = mergeBillingSnapshots(creditsSnap, monthlySnap);
+  if (value.available) {
+    cache.set(cacheKey, { at: now, value });
+    writeDiskCache(grokHome, value);
+    try {
+      const { writeUsageSidecar } = await import("./usage-sidecar.js");
+      writeUsageSidecar(grokHome, value);
+    } catch {
+      /* optional */
+    }
+    return value;
+  }
+
+  // D4: fall back to local usage sidecar when live billing misses
+  try {
+    const { readUsageSidecar } = await import("./usage-sidecar.js");
+    const side = readUsageSidecar(grokHome, { now });
+    if (side?.available) {
+      cache.set(cacheKey, { at: now, value: side });
+      return side;
+    }
+  } catch {
+    /* optional */
+  }
+
   cache.set(cacheKey, { at: now, value });
-  if (value.available) writeDiskCache(grokHome, value);
   return value;
 }
 

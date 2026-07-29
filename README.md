@@ -255,11 +255,36 @@ tmux source-file ~/.grok/hud/tmux.conf && tmux refresh-client -S
 | **essential** | 2 | 模型/git + 上下文/配额 + 活动 |
 | **minimal** | 1 | 单行压缩 |
 
+### 美学 aesthetic（0.4.2 → 0.6.0）
+
+| aesthetic | density | 分隔 | 进度条 | 主视线 | 适用 |
+|-----------|---------|------|--------|--------|------|
+| **classic** | comfortable | `│` pipe | block 14 | 全字段 | 兼容旧版 |
+| **codex**（推荐） | compact | `·` middot | thin 10 | **窗+额** 冷静 | 日常 |
+| **dense** | dense | space | dot 6 | 1 行 chip | 窄屏 |
+
+```bash
+grok-hud settings          # 交互切 aesthetic
+grok-hud info              # 打印 aesthetic + 数据优先级
+```
+
+```jsonc
+{
+  "aesthetic": "codex",
+  "timeFormat": "relative",          // relative | absolute | both
+  "usageEmphasisThreshold": 80,      // 额 ≥80% 才强调色
+  "tokenRevealAtContextPercent": 70  // 窗够热才展开 token 墙
+}
+```
+
+**配额数据优先级：** 实时 billing → 缓存 → `usage-sidecar.json` → 不可用。  
+成功拉到配额时会写 `~/.grok/hud/usage-sidecar.json`（给其它工具读）。
+
 常用字段：
 
 - `language`：`en`（默认）/ `zh-Hans` / `zh-Hant`
 - `bold: true` — 粗体数值
-- `barWidth: 14` — 进度条宽度  
+- `barWidth: 14` — 进度条宽度（aesthetic 会覆盖默认）
 
 字号由 Terminal 字体决定，状态栏无法单独放大。
 

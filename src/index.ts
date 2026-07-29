@@ -109,6 +109,7 @@ export interface CliOptions {
   theme?: string;
   preset?: string;
   settings: boolean;
+  info: boolean;
   language?: string;
 }
 
@@ -135,6 +136,7 @@ export function parseArgs(argv: string[]): CliOptions {
     dashboardWindow: false,
     runInTerminal: false,
     settings: false,
+    info: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -235,6 +237,10 @@ export function parseArgs(argv: string[]): CliOptions {
       case "settings":
         opts.settings = true;
         break;
+      case "--info":
+      case "info":
+        opts.info = true;
+        break;
       case "--lang":
       case "--language":
         opts.language = argv[++i];
@@ -276,6 +282,7 @@ Also:
   grok-build-hud --theme auto   # follow Grok /theme (default, not locked)
   grok-build-hud --preset full|essential|minimal
   grok-hud settings             # 设定界面（语言 中/英、预设、行数）
+  grok-hud info                 # aesthetic + data priority + config path
   grok-hud lang en              # English (default)
   grok-hud lang zh              # 简体中文
   grok-hud lang tw              # 繁體中文
@@ -288,6 +295,39 @@ Language: default English; switch in settings or: grok-hud lang zh
 Lifecycle: Terminal open → ready (not machine boot).
 文档: README.md（中文）· README.en.md（English）
 `;
+}
+
+/** Print aesthetic / density / data priority (D5). */
+export function formatHudInfo(grokHome: string): string {
+  const cfg = loadHudConfig(grokHome);
+  const cfgPath = path.join(grokHome, "hud", "config.json");
+  const lines = [
+    `grok-build-hud info`,
+    `  config:     ${cfgPath}`,
+    `  aesthetic:  ${cfg.aesthetic ?? "classic"}`,
+    `  density:    ${cfg.density ?? "comfortable"}`,
+    `  separator:  ${cfg.separator ?? "pipe"}`,
+    `  barStyle:   ${cfg.barStyle ?? "block"}  width=${cfg.barWidth ?? 14}`,
+    `  language:   ${cfg.language ?? "en"}`,
+    `  timeFormat: ${cfg.timeFormat ?? "relative"}`,
+    `  usageEmphasisThreshold: ${cfg.usageEmphasisThreshold ?? 0}`,
+    `  tokenRevealAtContextPercent: ${cfg.tokenRevealAtContextPercent ?? 0}`,
+    ``,
+    `Data priority (usage %):`,
+    `  1. live billing (cli-chat-proxy / xAI) → writes usage-sidecar.json`,
+    `  2. in-memory cache → ~/.grok/hud/billing-cache.json`,
+    `  3. externalUsagePath / usage-sidecar.json (freshness ${cfg.externalUsageFreshnessMs ?? 300_000}ms)`,
+    `  4. unavailable chip`,
+    ``,
+    `Data priority (context %):`,
+    `  1. session signals.json context window`,
+    `  2. events / turn_completed estimates`,
+    `  3. empty / 0%`,
+    ``,
+    `Status files: ~/.grok/hud/status*.txt  (content-fp skip-write when unchanged)`,
+    `Sidecar:      ~/.grok/hud/usage-sidecar.json`,
+  ];
+  return lines.join("\n");
 }
 
 async function resolveUsage(
@@ -380,7 +420,22 @@ export async function runCli(
     return 0;
   }
   if (opts.version) {
-    out("0.2.0");
+    try {
+      const pkg = JSON.parse(
+        fs.readFileSync(
+          path.join(packageRoot(), "package.json"),
+          "utf8",
+        ),
+      ) as { version?: string };
+      out(pkg.version ?? "0.6.0");
+    } catch {
+      out("0.6.0");
+    }
+    return 0;
+  }
+
+  if (opts.info) {
+    out(formatHudInfo(opts.grokHome ?? defaultGrokHome()));
     return 0;
   }
 

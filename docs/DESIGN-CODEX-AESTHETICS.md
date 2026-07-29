@@ -87,19 +87,19 @@ Codex App 像 **「安静的仪表」**：少色、轻分隔、状态才上色�
 - [x] 窗口 resize 不抖：hysteresis ≥2 cols
 - [x] 多 session 时 dim 非当前（`--all` plain 列表）
 
-### Wave D4 — CodexBar 级配额体验（0.5.x）
+### Wave D4 — CodexBar 级配额体验（0.6.0）✅
 
-- [ ] 配额 chip：`额 24% · 3h` 紧凑格式（无 “weekly” 长词时可缩 `周`）
-- [ ] 阈值门：额 ≥80% 才加粗/变色强调（冷静：平时不叫）
-- [ ] usage sidecar 写盘（供其它工具 / 对齐 Claude externalUsage）
-- [ ] 可选「重置墙钟」`resets at 14:30`（timeFormat）
+- [x] 配额 chip：`额 24% · 3h` 紧凑格式（无 “weekly” 长词时可缩 `周`）
+- [x] 阈值门：额 ≥80% 才加粗/变色强调（冷静：平时不叫）
+- [x] usage sidecar 写盘（供其它工具 / 对齐 Claude externalUsage）
+- [x] 可选「重置墙钟」`resets at 14:30`（timeFormat）
 
-### Wave D5 — 抛光与文档（0.6.0）
+### Wave D5 — 抛光与文档（0.6.0）✅
 
-- [ ] README 美学对比截图（classic vs codex vs dense）
-- [ ] `/hud` 命令打印当前 aesthetic + 数据优先级
-- [ ] golden fixtures：3 aesthetic × zh/en × 宽 40/80/120
-- [ ] 性能：compose 纯函数基准；dashboard 变更检测少写盘
+- [x] README 美学对比表（classic vs codex vs dense）
+- [x] `/hud` + `grok-hud info` 打印当前 aesthetic + 数据优先级
+- [x] golden fixtures：3 aesthetic × zh/en × 宽 40/80/120 smoke
+- [x] 性能：dashboard 变更检测少写盘（content-fp）
 
 ---
 

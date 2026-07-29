@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.0
+
+### Design aesthetics (Wave D4 — CodexBar-class usage chips)
+- **Compact usage chip**: `额 24% · 3h` (period word omitted on codex/dense when reset is shown).
+- **Calm emphasis gate**: `usageEmphasisThreshold` (codex/dense default **80**) — usage only
+  bold/severity-colors when pressure ≥ threshold; context always uses the full ladder.
+- **`timeFormat`**: `relative` | `absolute` | `both` (e.g. `3h·14:30`).
+- **`resetsAt`**: billing normalizer keeps ISO wall-clock; `format-reset-time` builds chip tails.
+- **Usage sidecar**: writes `~/.grok/hud/usage-sidecar.json` on successful billing fetch;
+  falls back to sidecar when live billing/auth misses (`externalUsagePath` / freshness ms).
+
+### Design aesthetics (Wave D5 — polish & docs)
+- **`grok-hud info`**: prints aesthetic, density, thresholds, and data priority.
+- **Content fingerprint**: status file writes skip disk I/O when payload unchanged (`.content-fp`).
+- **README** aesthetic comparison table; `/hud` command docs data priority.
+- **Golden tests**: aesthetic × language smoke + reset/sidecar/fingerprint unit tests.
+
 ## 0.5.0
 
 ### Design aesthetics (Wave D3 — dense chips & stable width)

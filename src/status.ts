@@ -36,6 +36,8 @@ import {
   loadHudConfig,
   type HudDisplayConfig,
 } from "./hud-config.js";
+import { formatResetFragment } from "./format-reset-time.js";
+import crypto from "node:crypto";
 import {
   adaptiveBarWidth,
   adaptiveStatusLines,
@@ -306,16 +308,18 @@ export function formatTmuxStatusLines(
         ? Math.max(0, 100 - usedPct)
         : usedPct;
     const q = Math.round(displayPct);
-    // Color by *pressure* (used %), not remaining — high used → warn/crit
+    // Color by *pressure* (used %); calm gate: only emphasize above threshold
     const pressure = usedPct;
+    const emphasisAt = cfg.usageEmphasisThreshold ?? 0;
+    const emphasize = emphasisAt <= 0 || pressure >= emphasisAt;
     const chars = barChars(cfg.barStyle);
     const bar = d.showContextBar
       ? miniBar(pressure, Math.max(6, barW - 2), theme, {
-          bold: true,
+          bold: emphasize,
           filledChar: chars.filled,
           emptyChar: chars.empty,
-          warningThreshold: cfg.warningThreshold,
-          criticalThreshold: cfg.criticalThreshold,
+          warningThreshold: emphasize ? cfg.warningThreshold : 101,
+          criticalThreshold: emphasize ? cfg.criticalThreshold : 101,
         }) + " "
       : "";
     const periodWord =
@@ -324,21 +328,28 @@ export function formatTmuxStatusLines(
         : usage.period === "monthly"
           ? L.monthly
           : usage.period ?? "";
-    const tail =
-      tier === "lg" && usage.resetsIn
-        ? ` ${periodWord} ${usage.resetsIn}`.trim()
-        : "";
-    const plain = `${L.use} ${q}%${tail ? " " + tail : ""}`;
-    const role = severityRole(
-      pressure,
-      cfg.warningThreshold,
-      cfg.criticalThreshold,
+    const resetFrag = formatResetFragment(
+      usage,
+      cfg.timeFormat ?? "relative",
     );
+    // D4 compact chip: 额 24% · 3h  (period only when not dense)
+    const tailParts: string[] = [];
+    if (tier === "lg" || tier === "md") {
+      if (cfg.aesthetic !== "dense" && periodWord) tailParts.push(periodWord);
+      if (resetFrag) tailParts.push(resetFrag);
+    } else if (resetFrag) {
+      tailParts.push(resetFrag);
+    }
+    const tail = tailParts.length ? ` ${tailParts.join(" ")}` : "";
+    const plain = `${L.use} ${q}%${tail}`;
+    const role = emphasize
+      ? severityRole(pressure, cfg.warningThreshold, cfg.criticalThreshold)
+      : "primary";
     const render =
       tmuxRole(theme, "label", `${L.use} `) +
       bar +
       tmuxRole(theme, role, `${q}%`) +
-      (tail ? tmuxRole(theme, "muted", ` ${tail}`) : "");
+      (tail ? tmuxRole(theme, "muted", tail) : "");
     l1.push({ text: plain, render, priority: 2 });
   }
 
@@ -571,8 +582,35 @@ export function writeStatusFiles(
     tmuxLines,
   };
 
+  // Content fingerprint — skip disk write when nothing changed (D5)
+  const fingerprint = crypto
+    .createHash("sha1")
+    .update(
+      [
+        session.sessionId,
+        session.contextPercent,
+        session.toolCallCount,
+        session.turnCount,
+        session.live ? "1" : "0",
+        full,
+        padded.join("\n"),
+        usage?.percent ?? "",
+        usage?.resetsIn ?? "",
+        maxWidth,
+      ].join("|"),
+    )
+    .digest("hex");
+
   const writeBundle = (targetDir: string) => {
     fs.mkdirSync(targetDir, { recursive: true });
+    const fpPath = path.join(targetDir, ".content-fp");
+    try {
+      if (fs.existsSync(fpPath) && fs.readFileSync(fpPath, "utf8").trim() === fingerprint) {
+        return; // unchanged
+      }
+    } catch {
+      /* write anyway */
+    }
     fs.writeFileSync(path.join(targetDir, "status-line.txt"), compact + "\n", "utf8");
     fs.writeFileSync(path.join(targetDir, "status.txt"), full + "\n", "utf8");
     fs.writeFileSync(path.join(targetDir, "tmux-status.txt"), single + "\n", "utf8");
@@ -582,6 +620,11 @@ export function writeStatusFiles(
       JSON.stringify(payload, null, 2),
       "utf8",
     );
+    try {
+      fs.writeFileSync(fpPath, fingerprint + "\n", "utf8");
+    } catch {
+      /* ignore */
+    }
   };
 
   if (options.writeGlobal !== false) {
