@@ -280,6 +280,28 @@ grok-hud info              # 打印 aesthetic + 数据优先级
 **配额数据优先级：** 实时 billing → 缓存 → `usage-sidecar.json` → 不可用。  
 成功拉到配额时会写 `~/.grok/hud/usage-sidecar.json`（给其它工具读）。
 
+### Phase C 可选字段（默认关）
+
+在 `display` 里打开（开启不炸；默认 full 也不挤主视线）：
+
+| 字段 | 效果 | 例 |
+|------|------|----|
+| `showGitFileStats` | 工作区文件变更计数 | `!2 +1 ✘1 ?3` |
+| `showGitAheadBehind` | 相对远程 ↑↓ | `↑2↓1` |
+| `showCompactions` | 本会话压缩次数（>0 才显） | `压2` |
+| `showSpeed` | 输出速度 | `42 tok/s` |
+| `showDiffStats` | agent 改行 Δ | `Δ +12/-3` |
+
+```jsonc
+{
+  "display": {
+    "showGitFileStats": true,
+    "showCompactions": true,
+    "showSpeed": true
+  }
+}
+```
+
 常用字段：
 
 - `language`：`en`（默认）/ `zh-Hans` / `zh-Hant`

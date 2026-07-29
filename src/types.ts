@@ -75,6 +75,14 @@ export interface TokenBreakdown {
   cacheHitPct: number;
 }
 
+/** Git porcelain file-change counts (opt-in display). */
+export interface GitFileStats {
+  modified: number;
+  added: number;
+  deleted: number;
+  untracked: number;
+}
+
 export interface SessionSnapshot {
   sessionId: string;
   sessionDir: string;
@@ -85,6 +93,8 @@ export interface SessionSnapshot {
   gitDirty?: boolean;
   gitAhead?: number;
   gitBehind?: number;
+  /** Porcelain M/A/D/? counts when working tree dirty. */
+  gitFileStats?: GitFileStats;
   live: boolean;
   pid?: number;
   contextPercent: number;
@@ -106,6 +116,8 @@ export interface SessionSnapshot {
   lastTurnTokens?: TokenBreakdown | null;
   /** Sum of turn_completed usage over the session. */
   sessionTokens?: TokenBreakdown | null;
+  /** Output tok/s when showSpeed enabled (may be null/idle). */
+  outputTokensPerSecond?: number | null;
   tools: ToolActivityItem[];
   agents: AgentActivityItem[];
   todos: TodoItem[];

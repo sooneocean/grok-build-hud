@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0
+
+### Phase C remainder — opt-in chips & dashboard skip
+- **Git file stats** (`display.showGitFileStats`, default off): porcelain chip  
+  `!M +A ✘D ?U` next to `git:(branch)`.
+- **`showGitAheadBehind`**: gate for `↑N ↓N` (classic full still on; essential/dense off).
+- **Compaction count** (`display.showCompactions`, default off): shows `压N` / `cmp×N` after first compact (from `signals.compactionCount`).
+- **Output speed** (`display.showSpeed`, default off): `tok/s` from successive output-token samples (`speed-cache/` per session).
+- **Dashboard skip-write**: in-process render key — skip status rewrite when session + usage identity unchanged (complements content-fp).
+- Tests for porcelain parse, speed window, render keys.
+
 ## 0.6.0
 
 ### Design aesthetics (Wave D4 — CodexBar-class usage chips)

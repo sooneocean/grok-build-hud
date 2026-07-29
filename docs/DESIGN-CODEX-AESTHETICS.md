@@ -187,7 +187,7 @@ Codex App 像 **「安静的仪表」**：少色、轻分隔、状态才上色�
 | 0.3.15 数据回退 | 不改数据层 |
 | 0.4.0 compose 单管线 | **美学只改 compose + theme + config** |
 | 0.4.1 elementOrder | density 映射默认 order |
-| 原 Phase C 功能（git stats 等） | 仍 opt-in；默认不进主视线 |
+| 原 Phase C 功能（git stats 等） | **0.7.0 已落地** opt-in；默认不进主视线 |
 
 ---
 

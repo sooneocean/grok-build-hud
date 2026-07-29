@@ -29,6 +29,8 @@ import type {
   UsageSnapshot,
 } from "../types.js";
 import { formatResetFragment } from "../format-reset-time.js";
+import { formatGitFileStats } from "../git.js";
+import { formatSpeed } from "../speed-tracker.js";
 import { alignedLabel } from "./label-align.js";
 import { truncateVisible } from "./width.js";
 
@@ -222,9 +224,15 @@ function buildProjectLine(
         if (d.showGit && session.branch) {
           const dirty = d.showGitDirty && session.gitDirty ? "*" : "";
           let ab = "";
-          if (session.gitAhead) ab += `↑${session.gitAhead}`;
-          if (session.gitBehind) ab += `↓${session.gitBehind}`;
+          if (d.showGitAheadBehind !== false) {
+            if (session.gitAhead) ab += `↑${session.gitAhead}`;
+            if (session.gitBehind) ab += `↓${session.gitBehind}`;
+          }
           proj += ` git:(${session.branch}${dirty}${ab})`;
+          if (d.showGitFileStats && session.gitFileStats) {
+            const fsChip = formatGitFileStats(session.gitFileStats);
+            if (fsChip) proj += ` ${fsChip}`;
+          }
         }
         return proj;
       }
@@ -367,31 +375,43 @@ function fragMeta(
   cfg: HudDisplayConfig,
   L: HudStrings,
 ): string {
-  // Under main-sight aesthetics, meta is suppressed on the health line
-  // (product already on usage; time/turns are secondary noise).
-  if (isMainSightOnly(cfg)) return "";
-
   const d = cfg.display;
   const meta: string[] = [];
-  if (d.showSessionTime && session.durationSeconds > 0) {
-    meta.push(formatDuration(session.durationSeconds));
+  // Under main-sight aesthetics, suppress time/turns/tools noise —
+  // but still honor Phase C opt-in chips (compaction / speed).
+  const calm = isMainSightOnly(cfg);
+  if (!calm) {
+    if (d.showSessionTime && session.durationSeconds > 0) {
+      meta.push(formatDuration(session.durationSeconds));
+    }
+    if (d.showTurns && session.turnCount > 0) {
+      meta.push(`${L.turn}${session.turnCount}`);
+    }
+    if (d.showTools && session.toolCallCount > 0) {
+      meta.push(`${L.tools}${session.toolCallCount}`);
+    }
+    if (d.showErrors && (session.errorCount > 0 || session.toolFailureCount > 0)) {
+      meta.push(`${L.err} ${session.errorCount || session.toolFailureCount}`);
+    }
+    if (
+      d.showDiffStats &&
+      (session.agentLinesAdded > 0 || session.agentLinesRemoved > 0)
+    ) {
+      meta.push(`Δ +${session.agentLinesAdded}/-${session.agentLinesRemoved}`);
+    }
   }
-  if (d.showTurns && session.turnCount > 0) {
-    meta.push(`${L.turn}${session.turnCount}`);
+  // Phase C opt-in: compaction count (hidden until first compact)
+  if (d.showCompactions && session.compactionCount > 0) {
+    meta.push(`${L.compact}${session.compactionCount}`);
   }
-  if (d.showTools && session.toolCallCount > 0) {
-    meta.push(`${L.tools}${session.toolCallCount}`);
-  }
-  if (d.showErrors && (session.errorCount > 0 || session.toolFailureCount > 0)) {
-    meta.push(`${L.err} ${session.errorCount || session.toolFailureCount}`);
-  }
+  // Phase C opt-in: output tok/s
   if (
-    d.showDiffStats &&
-    (session.agentLinesAdded > 0 || session.agentLinesRemoved > 0)
+    d.showSpeed &&
+    session.outputTokensPerSecond != null &&
+    session.outputTokensPerSecond > 0
   ) {
-    meta.push(`Δ +${session.agentLinesAdded}/-${session.agentLinesRemoved}`);
+    meta.push(formatSpeed(session.outputTokensPerSecond));
   }
-  // product lives on usage line now — avoid duplicate
   return meta.join(separatorString(cfg.separator));
 }
 

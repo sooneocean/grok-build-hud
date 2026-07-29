@@ -117,6 +117,10 @@ export interface HudDisplayConfig {
     showProject: boolean;
     showGit: boolean;
     showGitDirty: boolean;
+    /** Show ↑N ↓N ahead/behind remote (default true for classic full). */
+    showGitAheadBehind: boolean;
+    /** Show porcelain file counts `!M +A ✘D ?U` (opt-in, default false). */
+    showGitFileStats: boolean;
     showContextBar: boolean;
     /** percent | tokens | remaining | both */
     contextValue: ContextValueMode;
@@ -132,6 +136,10 @@ export interface HudDisplayConfig {
     showTodos: boolean;
     showErrors: boolean;
     showDiffStats: boolean;
+    /** Session compaction count from signals (opt-in; hidden until >0). */
+    showCompactions: boolean;
+    /** Output tok/s from successive samples (opt-in). */
+    showSpeed: boolean;
     showLive: boolean;
     showTitle: boolean;
     /** Show input/output/cache token breakdown (exact integers). */
@@ -196,6 +204,8 @@ export const PRESET_FULL: HudDisplayConfig = {
     showProject: true,
     showGit: true,
     showGitDirty: true,
+    showGitAheadBehind: true,
+    showGitFileStats: false,
     showContextBar: true,
     contextValue: "both",
     showUsage: true,
@@ -209,6 +219,8 @@ export const PRESET_FULL: HudDisplayConfig = {
     showTodos: true,
     showErrors: true,
     showDiffStats: true,
+    showCompactions: false,
+    showSpeed: false,
     showLive: true,
     showTitle: true,
     showTokenBreakdown: true,
@@ -244,6 +256,10 @@ export const PRESET_ESSENTIAL: HudDisplayConfig = {
     showTodos: true,
     showAgents: true,
     showDiffStats: false,
+    showGitFileStats: false,
+    showGitAheadBehind: false,
+    showCompactions: false,
+    showSpeed: false,
     showTitle: false,
     contextValue: "percent",
     usageValue: "percent",
@@ -279,6 +295,10 @@ export const PRESET_MINIMAL: HudDisplayConfig = {
     showTodos: false,
     showErrors: false,
     showDiffStats: false,
+    showGitFileStats: false,
+    showGitAheadBehind: false,
+    showCompactions: false,
+    showSpeed: false,
     showTitle: false,
     contextValue: "percent",
     usageValue: "percent",
@@ -598,8 +618,8 @@ export function applyAesthetic(
       usageEmphasisThreshold: 80,
       alignLabels: false,
       projectLineOrder: ["model", "project", "live"],
-      elementOrder: ["project", "context", "usage", "tools"],
-      mergeGroups: [["context", "usage"]],
+      elementOrder: ["project", "context", "usage", "meta", "tools"],
+      mergeGroups: [["context", "usage", "meta"]],
       display: {
         ...root.display,
         contextValue: "percent",
@@ -612,6 +632,10 @@ export function applyAesthetic(
         showTokenBreakdown: false,
         showProductBreakdown: false,
         showDiffStats: false,
+        showCompactions: false,
+        showSpeed: false,
+        showGitFileStats: false,
+        showGitAheadBehind: false,
         showTodos: false,
         showAgents: false,
         showToolActivity: true,
@@ -638,11 +662,12 @@ export function applyAesthetic(
       "project",
       "context",
       "usage",
+      "meta",
       "tools",
       "agents",
       "todos",
     ],
-    mergeGroups: [["context", "usage"]],
+    mergeGroups: [["context", "usage", "meta"]],
     display: {
       ...root.display,
       contextValue: "percent",
@@ -656,6 +681,9 @@ export function applyAesthetic(
       showTurns: false,
       showTools: false,
       showDiffStats: false,
+      showCompactions: false,
+      showSpeed: false,
+      showGitFileStats: false,
       showErrors: false,
       showToolActivity: true,
       showAgents: true,

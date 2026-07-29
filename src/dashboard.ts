@@ -124,9 +124,85 @@ export function listLiveSessions(grokHome = defaultGrokHome()): SessionSnapshot[
   return out;
 }
 
+/** mtime fingerprint of session input files (Phase C diagnostics / tests). */
+export function sessionSourceFingerprint(sessionDir: string): string {
+  const names = [
+    "signals.json",
+    "summary.json",
+    "updates.jsonl",
+    "events.jsonl",
+  ];
+  const bits: string[] = [];
+  for (const n of names) {
+    try {
+      const p = path.join(sessionDir, n);
+      if (!fs.existsSync(p)) {
+        bits.push(`${n}:0`);
+        continue;
+      }
+      const st = fs.statSync(p);
+      bits.push(`${n}:${st.mtimeMs}:${st.size}`);
+    } catch {
+      bits.push(`${n}:?`);
+    }
+  }
+  return bits.join("|");
+}
+
+/**
+ * Render identity for skip-write: includes live/pid-derived state that
+ * can flip without file mtime changes.
+ */
+export function sessionRenderKey(
+  snap: SessionSnapshot,
+  usageKey: string,
+): string {
+  const tools =
+    snap.tools
+      ?.slice(0, 6)
+      .map((t) => `${t.name}:${t.status}:${t.count ?? 1}`)
+      .join(",") ?? "";
+  return [
+    snap.sessionId,
+    snap.live ? "1" : "0",
+    snap.contextPercent,
+    snap.contextTokensUsed,
+    snap.toolCallCount,
+    snap.turnCount,
+    snap.compactionCount,
+    snap.gitDirty ? "d" : "",
+    snap.gitAhead ?? "",
+    snap.gitBehind ?? "",
+    snap.lastTurnTokens?.outputTokens ?? "",
+    snap.sessionTokens?.outputTokens ?? "",
+    snap.outputTokensPerSecond ?? "",
+    tools,
+    usageKey,
+  ].join("|");
+}
+
+/** Last render key per sessionId (in-process dashboard cache). */
+const sessionFpCache = new Map<string, { key: string; at: number }>();
+
+export function clearDashboardSessionCache(): void {
+  sessionFpCache.clear();
+}
+
+function usageKeyOf(usage: UsageSnapshot | null | undefined): string {
+  if (!usage?.available) return "na";
+  return [
+    usage.percent ?? "",
+    usage.resetsIn ?? "",
+    usage.resetsAt ?? "",
+    usage.message ?? "",
+  ].join(",");
+}
+
 export async function refreshDashboard(options: {
   grokHome?: string;
   noUsage?: boolean;
+  /** Force rewrite even when session inputs unchanged. */
+  force?: boolean;
 }): Promise<{ title: string; session: SessionSnapshot | null }> {
   const grokHome = options.grokHome ?? defaultGrokHome();
   // Parallel Terminals: update EVERY live session independently.
@@ -150,6 +226,7 @@ export async function refreshDashboard(options: {
       usage = null;
     }
   }
+  const uKey = usageKeyOf(usage);
 
   // Theme always follows Grok [ui].theme (auto → OS light/dark maps).
   // Fingerprint includes mapping + system appearance so /theme and OS toggle re-paint.
@@ -173,6 +250,8 @@ export async function refreshDashboard(options: {
       );
       writeTmuxConfFile(grokHome);
       applyTmuxStatusBar({ grokHome });
+      // theme change → force status rewrite
+      clearDashboardSessionCache();
     }
   } catch {
     /* ignore */
@@ -181,6 +260,12 @@ export async function refreshDashboard(options: {
   // Write per-tmux-session status so each Terminal bar shows ITS own Grok.
   // New windows are seeded at ctx 0% and never read global status (tmux-hud).
   for (const snap of targets) {
+    const rKey = sessionRenderKey(snap, uKey);
+    const cached = sessionFpCache.get(snap.sessionId);
+    if (!options.force && cached && cached.key === rKey) {
+      continue; // Phase C: skip re-render + disk write when nothing changed
+    }
+
     const tmuxSession = resolveTmuxSessionForGrok(snap.pid, grokHome);
     const tty = ttyForPid(snap.pid);
     const isPrimary =
@@ -190,6 +275,10 @@ export async function refreshDashboard(options: {
       ttyPath: tty,
       // Only primary overwrites global status.* (hooks / grok-hud status CLI)
       writeGlobal: isPrimary || targets.length === 1,
+    });
+    sessionFpCache.set(snap.sessionId, {
+      key: rKey,
+      at: Date.now(),
     });
 
     const title = titleLine(snap, usage);

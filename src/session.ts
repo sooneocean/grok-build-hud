@@ -10,6 +10,7 @@ import {
 } from "./events.js";
 import { parseTokenUsageFile } from "./token-usage.js";
 import { readGitInfo } from "./git.js";
+import { measureOutputSpeed } from "./speed-tracker.js";
 import type {
   ActiveSessionEntry,
   SessionSignals,
@@ -321,7 +322,7 @@ export function loadSnapshotFromDir(
     }));
   }
 
-  const git = cwd ? readGitInfo(cwd) : { dirty: false };
+  const git = cwd ? readGitInfo(cwd) : { dirty: false as boolean };
   const branch = git.branch ?? summary?.head_branch;
 
   const sigTurn =
@@ -342,6 +343,20 @@ export function loadSnapshotFromDir(
   const durationSeconds =
     sigDuration > 0 ? sigDuration : durationFromSummary(summary);
 
+  const lastTurn = tokenUsage.lastTurn;
+  const sessionTok =
+    tokenUsage.turnCount > 0 ? tokenUsage.session : null;
+  // Prefer session cumulative output for smoother tok/s; fall back to last turn
+  const outTok =
+    sessionTok && sessionTok.outputTokens > 0
+      ? sessionTok.outputTokens
+      : (lastTurn?.outputTokens ?? 0);
+  const grokHomeGuess = grokHomeFromSessionDir(sessionDir);
+  const outputTokensPerSecond =
+    outTok > 0
+      ? measureOutputSpeed(grokHomeGuess, sessionId, outTok)
+      : null;
+
   return {
     sessionId,
     sessionDir,
@@ -352,6 +367,7 @@ export function loadSnapshotFromDir(
     gitDirty: git.dirty,
     gitAhead: git.ahead,
     gitBehind: git.behind,
+    gitFileStats: git.fileStats,
     live,
     pid,
     contextPercent: percent,
@@ -382,15 +398,26 @@ export function loadSnapshotFromDir(
       typeof summary?.reasoning_effort === "string"
         ? summary.reasoning_effort
         : undefined,
-    lastTurnTokens: tokenUsage.lastTurn,
-    sessionTokens:
-      tokenUsage.turnCount > 0 ? tokenUsage.session : null,
+    lastTurnTokens: lastTurn,
+    sessionTokens: sessionTok,
+    outputTokensPerSecond,
     tools,
     agents: activity.agents,
     todos: activity.todos ?? [],
     signals,
     summary,
   };
+}
+
+/** `…/.grok/sessions/<cwd>/<id>` → `…/.grok` */
+export function grokHomeFromSessionDir(sessionDir: string): string {
+  const parts = sessionDir.split(path.sep);
+  const idx = parts.lastIndexOf("sessions");
+  if (idx > 0) {
+    const home = parts.slice(0, idx).join(path.sep);
+    if (home) return home;
+  }
+  return defaultGrokHome();
 }
 
 function decodeCwdGuess(sessionDir: string): string | undefined {

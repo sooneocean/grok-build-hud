@@ -23,6 +23,8 @@ export interface HudStrings {
   weekly: string;
   monthly: string;
   left: string;
+  /** Compaction count prefix e.g. 压 / compact× */
+  compact: string;
   /** Settings UI */
   settingsTitle: string;
   settingsHint: string;
@@ -77,6 +79,7 @@ const ZH_HANS: HudStrings = {
   weekly: "周",
   monthly: "月",
   left: "剩余",
+  compact: "压",
   settingsTitle: "Grok HUD 设定",
   settingsHint: "输入数字选择 · Enter 确认 · 0 保存退出",
   lang: "语言",
@@ -130,6 +133,7 @@ const ZH_HANT: HudStrings = {
   weekly: "週",
   monthly: "月",
   left: "剩餘",
+  compact: "壓",
   settingsTitle: "Grok HUD 設定",
   settingsHint: "輸入數字選擇 · Enter 確認 · 0 儲存離開",
   lang: "語言",
@@ -183,6 +187,7 @@ const EN: HudStrings = {
   weekly: "weekly",
   monthly: "monthly",
   left: "left",
+  compact: "cmp×",
   settingsTitle: "Grok HUD Settings",
   settingsHint: "Enter a number · 0 save & exit",
   lang: "Language",
