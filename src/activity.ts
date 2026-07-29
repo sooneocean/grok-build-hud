@@ -2,8 +2,14 @@ import fs from "node:fs";
 import type {
   AgentActivityItem,
   TodoItem,
+  TokenBreakdown,
   ToolActivityItem,
 } from "./types.js";
+import {
+  emptyTokenBreakdown,
+  parseTokenUsageFromLines,
+  readUpdatesText,
+} from "./token-usage.js";
 
 interface ToolState {
   id: string;
@@ -217,28 +223,62 @@ export function parseUpdatesFile(
   if (!fs.existsSync(filePath)) {
     return { tools: [], agents: [], todos: [] };
   }
-  const maxTail = options.maxTailBytes ?? 256_000;
   try {
-    const stat = fs.statSync(filePath);
-    let content: string;
-    if (stat.size <= maxTail) {
-      content = fs.readFileSync(filePath, "utf8");
-    } else {
-      const fd = fs.openSync(filePath, "r");
-      try {
-        const buf = Buffer.alloc(maxTail);
-        fs.readSync(fd, buf, 0, maxTail, stat.size - maxTail);
-        content = buf.toString("utf8");
-        // Drop partial first line
-        const nl = content.indexOf("\n");
-        if (nl >= 0) content = content.slice(nl + 1);
-      } finally {
-        fs.closeSync(fd);
-      }
-    }
+    // Activity only needs recent lines; use smaller tail for huge logs
+    const content = readUpdatesText(filePath, {
+      maxTailBytes: options.maxTailBytes ?? 256_000,
+      fullCapBytes: options.maxTailBytes ?? 256_000,
+    });
     return parseUpdatesLines(content.split(/\r?\n/));
   } catch {
     return { tools: [], agents: [], todos: [] };
+  }
+}
+
+/**
+ * Single read of updates.jsonl → tools/agents/todos + token usage (1.3 opt).
+ * Avoids double-parse / double-read of the same file on every dashboard tick.
+ */
+export function parseUpdatesBundle(filePath: string): {
+  tools: ToolActivityItem[];
+  agents: AgentActivityItem[];
+  todos: TodoItem[];
+  lastTurn: TokenBreakdown | null;
+  session: TokenBreakdown;
+  turnCount: number;
+} {
+  if (!fs.existsSync(filePath)) {
+    return {
+      tools: [],
+      agents: [],
+      todos: [],
+      lastTurn: null,
+      session: emptyTokenBreakdown(),
+      turnCount: 0,
+    };
+  }
+  try {
+    const content = readUpdatesText(filePath);
+    const lines = content.split(/\r?\n/);
+    const activity = parseUpdatesLines(lines);
+    const tokens = parseTokenUsageFromLines(lines);
+    return {
+      tools: activity.tools,
+      agents: activity.agents,
+      todos: activity.todos,
+      lastTurn: tokens.lastTurn,
+      session: tokens.session,
+      turnCount: tokens.turnCount,
+    };
+  } catch {
+    return {
+      tools: [],
+      agents: [],
+      todos: [],
+      lastTurn: null,
+      session: emptyTokenBreakdown(),
+      turnCount: 0,
+    };
   }
 }
 

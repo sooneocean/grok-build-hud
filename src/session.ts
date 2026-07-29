@@ -2,21 +2,56 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { contextPercentFromSignals } from "./bar.js";
-import { parseUpdatesFile } from "./activity.js";
+import { parseUpdatesBundle } from "./activity.js";
 import {
   durationFromSummary,
   estimateContextFromSessionDir,
   parseEventsFile,
 } from "./events.js";
-import { parseTokenUsageFile } from "./token-usage.js";
 import { readGitInfo } from "./git.js";
 import { measureOutputSpeed } from "./speed-tracker.js";
+import { loadHudConfig } from "./hud-config.js";
 import type {
   ActiveSessionEntry,
   SessionSignals,
   SessionSnapshot,
   SessionSummary,
 } from "./types.js";
+
+/** Snapshot cache: skip re-parse when session files unchanged (1.3). */
+const snapCache = new Map<
+  string,
+  { fp: string; snap: SessionSnapshot; at: number }
+>();
+
+export function clearSnapshotCache(): void {
+  snapCache.clear();
+}
+
+/** Light fingerprint of session inputs (mtime+size). */
+export function sessionInputFingerprint(sessionDir: string): string {
+  const names = [
+    "signals.json",
+    "summary.json",
+    "updates.jsonl",
+    "events.jsonl",
+  ];
+  const bits: string[] = [];
+  for (const n of names) {
+    try {
+      const p = path.join(sessionDir, n);
+      if (!fs.existsSync(p)) {
+        bits.push(`${n}:0`);
+        continue;
+      }
+      const st = fs.statSync(p);
+      bits.push(`${n}:${st.mtimeMs}:${st.size}`);
+    } catch {
+      bits.push(`${n}:?`);
+    }
+  }
+  return bits.join("|");
+}
 
 export function defaultGrokHome(): string {
   return process.env.GROK_HOME?.trim() || path.join(os.homedir(), ".grok");
@@ -235,6 +270,10 @@ export function loadSnapshotFromDir(
   options: {
     active?: ActiveSessionEntry[];
     preferLive?: boolean;
+    /** Measure tok/s (writes speed-cache). Default: follow HUD showSpeed. */
+    trackSpeed?: boolean;
+    /** Bypass mtime snapshot cache. */
+    bypassCache?: boolean;
   } = {},
 ): SessionSnapshot | null {
   if (!sessionDir || !fs.existsSync(sessionDir)) return null;
@@ -243,6 +282,33 @@ export function loadSnapshotFromDir(
   const summaryPath = path.join(sessionDir, "summary.json");
   // Require at least one of the core session files
   if (!fs.existsSync(signalsPath) && !fs.existsSync(summaryPath)) return null;
+
+  const active = options.active ?? [];
+  const fp = sessionInputFingerprint(sessionDir);
+  if (!options.bypassCache) {
+    const hit = snapCache.get(sessionDir);
+    if (hit && hit.fp === fp) {
+      // Re-bind live/pid + git (working tree can change without session files)
+      const sessionId =
+        hit.snap.sessionId || path.basename(sessionDir) || "unknown";
+      const activeHit = active.find((a) => a.session_id === sessionId);
+      const pid = activeHit?.pid;
+      const live = Boolean(activeHit && isPidAlive(pid));
+      const cwd = hit.snap.cwd || activeHit?.cwd || hit.snap.cwd;
+      const git = cwd ? readGitInfo(cwd) : { dirty: false as boolean };
+      return {
+        ...hit.snap,
+        live,
+        pid,
+        cwd,
+        gitDirty: git.dirty,
+        gitAhead: git.ahead,
+        gitBehind: git.behind,
+        gitFileStats: git.fileStats,
+        branch: git.branch ?? hit.snap.branch,
+      };
+    }
+  }
 
   const hasSignalsFile = fs.existsSync(signalsPath);
   const signals =
@@ -260,7 +326,6 @@ export function loadSnapshotFromDir(
     decodeCwdGuess(sessionDir) ??
     "";
 
-  const active = options.active ?? [];
   const activeHit = active.find((a) => a.session_id === sessionId);
   const pid = activeHit?.pid;
   const live = Boolean(activeHit && isPidAlive(pid));
@@ -271,7 +336,7 @@ export function loadSnapshotFromDir(
     summary?.current_model_id ||
     "unknown";
 
-  // events.jsonl: reliable mid-turn when signals.json is missing or stale
+  // events.jsonl: reliable mid-turn when signals lag
   const eventsPath = path.join(sessionDir, "events.jsonl");
   const events = parseEventsFile(eventsPath);
 
@@ -301,10 +366,10 @@ export function loadSnapshotFromDir(
   }
 
   const updatesPath = path.join(sessionDir, "updates.jsonl");
-  const activity = parseUpdatesFile(updatesPath);
-  const tokenUsage = parseTokenUsageFile(updatesPath);
+  // Single read: tools + token usage (was double-parse every tick)
+  const bundle = parseUpdatesBundle(updatesPath);
   // Fallback: toolsUsed from signals when updates empty
-  let tools = activity.tools;
+  let tools = bundle.tools;
   if (!tools.length && Array.isArray(signals.toolsUsed) && signals.toolsUsed.length) {
     tools = signals.toolsUsed.map((name, i) => ({
       id: `sig-${i}`,
@@ -343,21 +408,28 @@ export function loadSnapshotFromDir(
   const durationSeconds =
     sigDuration > 0 ? sigDuration : durationFromSummary(summary);
 
-  const lastTurn = tokenUsage.lastTurn;
-  const sessionTok =
-    tokenUsage.turnCount > 0 ? tokenUsage.session : null;
+  const lastTurn = bundle.lastTurn;
+  const sessionTok = bundle.turnCount > 0 ? bundle.session : null;
   // Prefer session cumulative output for smoother tok/s; fall back to last turn
   const outTok =
     sessionTok && sessionTok.outputTokens > 0
       ? sessionTok.outputTokens
       : (lastTurn?.outputTokens ?? 0);
   const grokHomeGuess = grokHomeFromSessionDir(sessionDir);
+  let trackSpeed = options.trackSpeed;
+  if (trackSpeed === undefined) {
+    try {
+      trackSpeed = Boolean(loadHudConfig(grokHomeGuess).display?.showSpeed);
+    } catch {
+      trackSpeed = false;
+    }
+  }
   const outputTokensPerSecond =
-    outTok > 0
+    trackSpeed && outTok > 0
       ? measureOutputSpeed(grokHomeGuess, sessionId, outTok)
       : null;
 
-  return {
+  const snap: SessionSnapshot = {
     sessionId,
     sessionDir,
     cwd: cwd || activeHit?.cwd || "",
@@ -402,11 +474,14 @@ export function loadSnapshotFromDir(
     sessionTokens: sessionTok,
     outputTokensPerSecond,
     tools,
-    agents: activity.agents,
-    todos: activity.todos ?? [],
+    agents: bundle.agents,
+    todos: bundle.todos ?? [],
     signals,
     summary,
   };
+
+  snapCache.set(sessionDir, { fp, snap, at: Date.now() });
+  return snap;
 }
 
 /** `…/.grok/sessions/<cwd>/<id>` → `…/.grok` */

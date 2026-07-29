@@ -71,10 +71,58 @@ export function formatGitFileStats(stats: GitFileStats): string {
   return bits.join(" ");
 }
 
-export function readGitInfo(cwd: string): GitInfo {
+/** Cache git probes — dashboard ticks ~500ms; git porcelain is the heavy cost. */
+const GIT_CACHE_TTL_MS = 2_500;
+const gitCache = new Map<
+  string,
+  { at: number; stamp: string; info: GitInfo }
+>();
+
+export function clearGitInfoCache(): void {
+  gitCache.clear();
+}
+
+/** Cheap invalidation key: HEAD + index mtimes (when available). */
+function gitStamp(cwd: string): string {
+  const bits: string[] = [];
+  for (const rel of [".git/HEAD", ".git/index", ".git/FETCH_HEAD"]) {
+    try {
+      const p = path.join(cwd, rel);
+      if (!fs.existsSync(p)) {
+        bits.push(`${rel}:0`);
+        continue;
+      }
+      const st = fs.statSync(p);
+      bits.push(`${rel}:${st.mtimeMs}`);
+    } catch {
+      bits.push(`${rel}:?`);
+    }
+  }
+  return bits.join("|");
+}
+
+export function readGitInfo(
+  cwd: string,
+  options: { now?: number; bypassCache?: boolean } = {},
+): GitInfo {
   if (!cwd || !fs.existsSync(cwd)) {
     return { dirty: false };
   }
+  const now = options.now ?? Date.now();
+  const stamp = gitStamp(cwd);
+  if (!options.bypassCache) {
+    const hit = gitCache.get(cwd);
+    if (hit && hit.stamp === stamp && now - hit.at < GIT_CACHE_TTL_MS) {
+      return hit.info;
+    }
+  }
+
+  const info = readGitInfoUncached(cwd);
+  gitCache.set(cwd, { at: now, stamp, info });
+  return info;
+}
+
+function readGitInfoUncached(cwd: string): GitInfo {
   try {
     const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
       cwd,

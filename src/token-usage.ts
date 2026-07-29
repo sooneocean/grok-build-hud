@@ -128,12 +128,40 @@ export function parseTokenUsageFile(filePath: string): {
     if (!fs.existsSync(filePath)) {
       return { lastTurn: null, session: emptyTokenBreakdown(), turnCount: 0 };
     }
-    // Large logs: read tail first for last-turn speed, full scan for session sum
-    // For correctness scan full file (typical session < 50MB). Stream line by line.
-    const text = fs.readFileSync(filePath, "utf8");
-    return parseTokenUsageFromLines(text.split("\n"));
+    // Prefer shared read helper (tail for huge files) — see readUpdatesText
+    const text = readUpdatesText(filePath);
+    return parseTokenUsageFromLines(text.split(/\r?\n/));
   } catch {
     return { lastTurn: null, session: emptyTokenBreakdown(), turnCount: 0 };
+  }
+}
+
+/** Max bytes for full session sum scan; larger → tail (last-turn still accurate). */
+const TOKEN_FULL_CAP = 4_000_000;
+const TOKEN_TAIL = 512_000;
+
+/** Shared updates.jsonl reader (full under cap, else tail). */
+export function readUpdatesText(
+  filePath: string,
+  options: { maxTailBytes?: number; fullCapBytes?: number } = {},
+): string {
+  const fullCap = options.fullCapBytes ?? TOKEN_FULL_CAP;
+  const maxTail = options.maxTailBytes ?? TOKEN_TAIL;
+  if (!fs.existsSync(filePath)) return "";
+  const stat = fs.statSync(filePath);
+  if (stat.size <= fullCap) {
+    return fs.readFileSync(filePath, "utf8");
+  }
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const buf = Buffer.alloc(maxTail);
+    fs.readSync(fd, buf, 0, maxTail, Math.max(0, stat.size - maxTail));
+    let content = buf.toString("utf8");
+    const nl = content.indexOf("\n");
+    if (nl >= 0) content = content.slice(nl + 1);
+    return content;
+  } finally {
+    fs.closeSync(fd);
   }
 }
 

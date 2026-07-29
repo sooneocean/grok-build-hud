@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.0
+
+### Performance — dashboard tick hot path
+- **Single-read `updates.jsonl`**: `parseUpdatesBundle` feeds tools + tokens
+  (no double open/parse per tick). Large files tail-capped.
+- **Git cache**: 2.5s TTL + HEAD/index stamp invalidation (`readGitInfo`).
+- **Snapshot mtime cache**: skip re-parse when session files unchanged; still
+  refreshes live/pid/git on cache hit.
+- **Speed tracker**: only runs when `display.showSpeed` is on (default off).
+
 ## 1.2.0
 
 ### Release tooling + layout set
