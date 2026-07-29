@@ -18,7 +18,8 @@ import type {
   SessionSummary,
 } from "./types.js";
 
-/** Snapshot cache: skip re-parse when session files unchanged (1.3). */
+/** Snapshot cache: skip re-parse when session files unchanged (1.3). Soft cap (1.7). */
+const MAX_SNAP_CACHE = 64;
 const snapCache = new Map<
   string,
   { fp: string; snap: SessionSnapshot; at: number }
@@ -28,13 +29,34 @@ export function clearSnapshotCache(): void {
   snapCache.clear();
 }
 
-/** Light fingerprint of session inputs (mtime+size). */
+function snapCacheSet(
+  sessionDir: string,
+  entry: { fp: string; snap: SessionSnapshot; at: number },
+): void {
+  // Refresh insertion order for LRU-ish eviction
+  if (snapCache.has(sessionDir)) snapCache.delete(sessionDir);
+  snapCache.set(sessionDir, entry);
+  while (snapCache.size > MAX_SNAP_CACHE) {
+    const first = snapCache.keys().next().value as string | undefined;
+    if (!first) break;
+    snapCache.delete(first);
+  }
+}
+
+/**
+ * Light fingerprint of session inputs (mtime+size).
+ * Includes estimate-context sources so first-turn / no-signals bars move (1.7).
+ */
 export function sessionInputFingerprint(sessionDir: string): string {
   const names = [
     "signals.json",
     "summary.json",
     "updates.jsonl",
     "events.jsonl",
+    // estimateContextFromSessionDir inputs — must bust pre-skip + snap cache
+    "chat_history.jsonl",
+    "prompt_context.json",
+    "system_prompt.txt",
   ];
   const bits: string[] = [];
   for (const n of names) {
@@ -51,6 +73,41 @@ export function sessionInputFingerprint(sessionDir: string): string {
     }
   }
   return bits.join("|");
+}
+
+/**
+ * Cheap rebind of live/pid/git without re-parsing session JSON (1.7 pre-skip).
+ * Worktree dirtiness can change without session file mtimes.
+ */
+export function rebindSnapshotRuntime(
+  snap: SessionSnapshot,
+  options: {
+    active?: ActiveSessionEntry[];
+    cwd?: string;
+    pid?: number;
+  } = {},
+): SessionSnapshot {
+  const active = options.active ?? [];
+  const sessionId = snap.sessionId || "unknown";
+  const activeHit = active.find((a) => a.session_id === sessionId);
+  const pid = options.pid ?? activeHit?.pid ?? snap.pid;
+  // Prefer active entry when present; else keep prior live if pid still alive
+  const live = activeHit
+    ? Boolean(activeHit.pid && isPidAlive(activeHit.pid))
+    : Boolean(pid && isPidAlive(pid));
+  const cwd = options.cwd || activeHit?.cwd || snap.cwd || "";
+  const git = cwd ? readGitInfo(cwd) : { dirty: false as boolean };
+  return {
+    ...snap,
+    live,
+    pid: activeHit?.pid ?? pid,
+    cwd: cwd || snap.cwd,
+    gitDirty: git.dirty,
+    gitAhead: git.ahead,
+    gitBehind: git.behind,
+    gitFileStats: git.fileStats,
+    branch: git.branch ?? snap.branch,
+  };
 }
 
 export function defaultGrokHome(): string {
@@ -309,24 +366,7 @@ export function loadSnapshotFromDir(
     const hit = snapCache.get(sessionDir);
     if (hit && hit.fp === fp) {
       // Re-bind live/pid + git (working tree can change without session files)
-      const sessionId =
-        hit.snap.sessionId || path.basename(sessionDir) || "unknown";
-      const activeHit = active.find((a) => a.session_id === sessionId);
-      const pid = activeHit?.pid;
-      const live = Boolean(activeHit && isPidAlive(pid));
-      const cwd = hit.snap.cwd || activeHit?.cwd || hit.snap.cwd;
-      const git = cwd ? readGitInfo(cwd) : { dirty: false as boolean };
-      return {
-        ...hit.snap,
-        live,
-        pid,
-        cwd,
-        gitDirty: git.dirty,
-        gitAhead: git.ahead,
-        gitBehind: git.behind,
-        gitFileStats: git.fileStats,
-        branch: git.branch ?? hit.snap.branch,
-      };
+      return rebindSnapshotRuntime(hit.snap, { active });
     }
   }
 
@@ -500,7 +540,7 @@ export function loadSnapshotFromDir(
     summary,
   };
 
-  snapCache.set(sessionDir, { fp, snap, at: Date.now() });
+  snapCacheSet(sessionDir, { fp, snap, at: Date.now() });
   return snap;
 }
 
@@ -591,14 +631,28 @@ const sessionDirIndex = new Map<
   { stamp: string; byId: Map<string, string> }
 >();
 
+/**
+ * Dirtiness stamp for sessions tree.
+ * Nested session create updates parent-dir mtime (macOS/Linux) — include
+ * one level of child dir mtimes so stamp moves without full rebuild miss.
+ */
 function sessionsRootStamp(grokHome: string): string {
   const root = path.join(grokHome, "sessions");
   try {
     if (!fs.existsSync(root)) return "0";
     const st = fs.statSync(root);
-    // size of readdir as cheap dirtiness proxy + mtime
-    const n = fs.readdirSync(root).length;
-    return `${st.mtimeMs}:${n}`;
+    const entries = fs.readdirSync(root, { withFileTypes: true });
+    const bits: string[] = [`${st.mtimeMs}:${entries.length}`];
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith(".")) continue;
+      try {
+        const cst = fs.statSync(path.join(root, e.name));
+        bits.push(`${e.name}:${cst.mtimeMs}`);
+      } catch {
+        bits.push(`${e.name}:?`);
+      }
+    }
+    return bits.join("|");
   } catch {
     return "?";
   }

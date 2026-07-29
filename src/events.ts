@@ -92,7 +92,9 @@ export function parseEventsLines(lines: string[]): EventsMetrics {
 
 /**
  * Tail-read events.jsonl (large files are common on long sessions).
+ * Soft-capped path cache (1.7 long-running daemon).
  */
+const MAX_EVENTS_FILE_CACHE = 64;
 const eventsFileCache = new Map<
   string,
   { mtimeMs: number; size: number; metrics: EventsMetrics }
@@ -102,11 +104,27 @@ export function clearEventsFileCache(): void {
   eventsFileCache.clear();
 }
 
+function eventsCacheSet(
+  filePath: string,
+  entry: { mtimeMs: number; size: number; metrics: EventsMetrics },
+): void {
+  if (eventsFileCache.has(filePath)) eventsFileCache.delete(filePath);
+  eventsFileCache.set(filePath, entry);
+  while (eventsFileCache.size > MAX_EVENTS_FILE_CACHE) {
+    const first = eventsFileCache.keys().next().value as string | undefined;
+    if (!first) break;
+    eventsFileCache.delete(first);
+  }
+}
+
 export function parseEventsFile(
   filePath: string,
   options: { maxTailBytes?: number } = {},
 ): EventsMetrics {
-  if (!fs.existsSync(filePath)) return emptyEventsMetrics();
+  if (!fs.existsSync(filePath)) {
+    eventsFileCache.delete(filePath);
+    return emptyEventsMetrics();
+  }
   const maxTail = options.maxTailBytes ?? 512_000;
   try {
     const stat = fs.statSync(filePath);
@@ -116,6 +134,9 @@ export function parseEventsFile(
       cached.mtimeMs === stat.mtimeMs &&
       cached.size === stat.size
     ) {
+      // Touch for LRU order
+      eventsFileCache.delete(filePath);
+      eventsFileCache.set(filePath, cached);
       return cached.metrics;
     }
     let content: string;
@@ -141,13 +162,14 @@ export function parseEventsFile(
       }
     }
     const metrics = parseEventsLines(content.split(/\r?\n/));
-    eventsFileCache.set(filePath, {
+    eventsCacheSet(filePath, {
       mtimeMs: stat.mtimeMs,
       size: stat.size,
       metrics,
     });
     return metrics;
   } catch {
+    eventsFileCache.delete(filePath);
     return emptyEventsMetrics();
   }
 }

@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.7.0
+
+### Stability — correct caches, observable daemon
+- **Fingerprint completeness**: `sessionInputFingerprint` includes
+  `chat_history.jsonl` / `prompt_context.json` / `system_prompt.txt` so
+  first-turn estimate context cannot freeze under pre-skip / snap cache.
+- **Pre-skip rebind**: skip-load ticks still `rebindSnapshotRuntime` (live +
+  git) and re-paint when `sessionRenderKey` changes — unstaged git dirtiness
+  no longer stuck forever.
+- **Cache bounds**: snap + events file caches soft-cap 64 (LRU-ish); missing
+  events file drops cache entry.
+- **Sessions index stamp**: includes one-level child dir mtimes (nested new
+  sessions under existing workspace parent).
+- **Clear consistency**: config mtime change uses `clearAllHotPathCaches`
+  (same set as theme).
+- **Daemon**: rate-limited errors → `~/.grok/hud/dashboard.log`; refuse dual
+  writer when another live dashboard owns pid; abort after 50 consecutive
+  refresh failures (no silent zombie).
+- Tests: `tests/stability.test.ts`.
+
 ## 1.6.0
 
 ### Deep hot-path optimization

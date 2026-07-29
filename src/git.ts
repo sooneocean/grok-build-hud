@@ -82,10 +82,14 @@ export function clearGitInfoCache(): void {
   gitCache.clear();
 }
 
-/** Cheap invalidation key: HEAD + index mtimes (when available). */
+/**
+ * Cheap invalidation key for git metadata (1.7: also `.git` dir mtime).
+ * Unstaged worktree edits may not move HEAD/index — dashboard pre-skip
+ * rebinds git via readGitInfo on every tick without needing a full reload.
+ */
 export function gitStamp(cwd: string): string {
   const bits: string[] = [];
-  for (const rel of [".git/HEAD", ".git/index", ".git/FETCH_HEAD"]) {
+  for (const rel of [".git/HEAD", ".git/index", ".git/FETCH_HEAD", ".git"]) {
     try {
       const p = path.join(cwd, rel);
       if (!fs.existsSync(p)) {

@@ -19,6 +19,7 @@ import {
   isPidAlive,
   clearSnapshotCache,
   clearSessionDirIndex,
+  rebindSnapshotRuntime,
 } from "./session.js";
 import { getCreditUsage } from "./billing.js";
 import { writeStatusFiles, formatCompactLine } from "./status.js";
@@ -283,12 +284,10 @@ export async function refreshDashboard(options: {
   }
   const uKey = usageKeyOf(usage);
   const cfgStamp = hudConfigStamp(grokHome);
-  // Config edit (set/settings) must force re-render even if session files idle
+  // Config edit (set/settings): same clear set as theme (1.7 consistency)
   if (cfgStamp !== lastHudConfigStamp) {
+    clearAllHotPathCaches();
     lastHudConfigStamp = cfgStamp;
-    clearDashboardSessionCache();
-    clearSnapshotCache();
-    clearHudConfigCache();
   }
 
   // Theme always follows Grok [ui].theme (auto → OS light/dark maps).
@@ -378,23 +377,15 @@ export async function refreshDashboard(options: {
 
   const targets: SessionSnapshot[] = [];
 
-  for (const w of work) {
-    if (w.skipLoad) {
-      const cached = lastSnapById.get(w.sessionId)!;
-      targets.push(cached);
-      continue;
-    }
-
-    const snap = loadSnapshotFromDir(w.dir, { active });
-    if (!snap?.live) continue;
+  const paintSession = (snap: SessionSnapshot, preKey: string) => {
     lastSnapById.set(snap.sessionId, snap);
-    sessionPreCache.set(snap.sessionId, w.preKey);
+    sessionPreCache.set(snap.sessionId, preKey);
     targets.push(snap);
 
     const rKey = sessionRenderKey(snap, uKey);
     const cached = sessionFpCache.get(snap.sessionId);
     if (!options.force && cached && cached.key === rKey) {
-      continue; // loaded but content identical → skip write
+      return; // content identical → skip write
     }
 
     const tmuxSession = resolveTmuxSessionForGrok(snap.pid, grokHome);
@@ -417,6 +408,25 @@ export async function refreshDashboard(options: {
       setAppleTerminalTitle(title, { ttyHint: path.basename(tty) });
       sessionTitleCache.set(snap.sessionId, title);
     }
+  };
+
+  for (const w of work) {
+    if (w.skipLoad) {
+      // Rebind live/git without re-parse so worktree dirtiness still paints (1.7)
+      const cached = lastSnapById.get(w.sessionId)!;
+      const rebound = rebindSnapshotRuntime(cached, {
+        active,
+        cwd: w.cwd,
+        pid: w.pid,
+      });
+      if (!rebound.live) continue;
+      paintSession(rebound, w.preKey);
+      continue;
+    }
+
+    const snap = loadSnapshotFromDir(w.dir, { active });
+    if (!snap?.live) continue;
+    paintSession(snap, w.preKey);
   }
 
   if (!targets.length) {
@@ -612,6 +622,34 @@ end tell
   }
 }
 
+/** Rate-limited dashboard error log (daemon stays up but not silent). */
+export function appendDashboardError(
+  grokHome: string,
+  err: unknown,
+  options: { now?: number; minIntervalMs?: number } = {},
+): void {
+  const now = options.now ?? Date.now();
+  const minInterval = options.minIntervalMs ?? 5_000;
+  const last = lastDashboardErrorAt.get(grokHome) ?? 0;
+  if (now - last < minInterval) return;
+  lastDashboardErrorAt.set(grokHome, now);
+  try {
+    const logPath = path.join(grokHome, "hud", "dashboard.log");
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    const msg = err instanceof Error ? err.stack || err.message : String(err);
+    const line = `[${new Date(now).toISOString()}] refresh error: ${msg}\n`;
+    fs.appendFileSync(logPath, line, "utf8");
+  } catch {
+    /* ignore log failures */
+  }
+}
+
+const lastDashboardErrorAt = new Map<string, number>();
+/** Exported for tests. */
+export function clearDashboardErrorLogState(): void {
+  lastDashboardErrorAt.clear();
+}
+
 export async function runDashboardLoop(options: {
   grokHome?: string;
   intervalMs?: number;
@@ -627,6 +665,44 @@ export async function runDashboardLoop(options: {
 
   if (options.writePid !== false) {
     fs.mkdirSync(path.join(grokHome, "hud"), { recursive: true });
+    // Refuse to dual-write if another live dashboard owns the pid file (1.7)
+    try {
+      const p = dashboardPidPath(grokHome);
+      if (fs.existsSync(p)) {
+        const existing = Number(fs.readFileSync(p, "utf8").trim());
+        if (
+          Number.isFinite(existing) &&
+          existing > 0 &&
+          existing !== process.pid
+        ) {
+          try {
+            process.kill(existing, 0);
+            const cmd = execFileSync(
+              "ps",
+              ["-p", String(existing), "-o", "command="],
+              {
+                encoding: "utf8",
+                timeout: 1000,
+                stdio: ["ignore", "pipe", "ignore"],
+              },
+            );
+            if (cmd.includes("dashboard") || cmd.includes("grok-build-hud")) {
+              appendDashboardError(
+                grokHome,
+                new Error(
+                  `another dashboard pid ${existing} is running — exiting`,
+                ),
+              );
+              return 1;
+            }
+          } catch {
+            /* stale pid — take over */
+          }
+        }
+      }
+    } catch {
+      /* proceed */
+    }
     fs.writeFileSync(dashboardPidPath(grokHome), String(process.pid) + "\n");
   }
 
@@ -651,6 +727,7 @@ export async function runDashboardLoop(options: {
   });
 
   let i = 0;
+  let consecutiveErrors = 0;
   // eslint-disable-next-line no-constant-condition
   while (true) {
     i += 1;
@@ -659,8 +736,20 @@ export async function runDashboardLoop(options: {
         grokHome,
         noUsage: options.noUsage,
       });
-    } catch {
-      /* keep looping */
+      consecutiveErrors = 0;
+    } catch (err) {
+      consecutiveErrors += 1;
+      appendDashboardError(grokHome, err);
+      // Extreme: if refresh keeps dying, still sleep — never tight-loop burn CPU
+      if (consecutiveErrors >= 50) {
+        appendDashboardError(
+          grokHome,
+          new Error(`abort after ${consecutiveErrors} consecutive refresh errors`),
+          { minIntervalMs: 0 },
+        );
+        cleanup();
+        return 2;
+      }
     }
     if (options.maxIterations && i >= options.maxIterations) {
       cleanup();
