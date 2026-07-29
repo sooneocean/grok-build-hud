@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0
+
+### Phase D — docs, settings polish, idempotent install
+- **Settings a/b/c/d**: toggle git file stats, compactions, speed, ahead/behind
+  without editing JSON (preview sample includes those chips when on).
+- **README capability map** (Chinese + English): Claude HUD vs Grok Build HUD.
+- **README.en.md** synced: aesthetics, optional chips, data priority, `grok-hud info`.
+- **`scripts/install.sh` idempotent**: re-run keeps existing `config.json` aesthetic
+  (no forced `--preset full` on upgrade); still rebuilds CLI + dashboard + plugin.
+- **`grok-hud info`**: lists Phase C optional chip on/off flags.
+- Skill + `/settings` command docs updated for 0.7–0.8 surface.
+
 ## 0.7.0
 
 ### Phase C remainder — opt-in chips & dashboard skip

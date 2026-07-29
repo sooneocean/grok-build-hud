@@ -117,7 +117,8 @@ git pull && bash scripts/install.sh
 grok                          # Grok + bottom HUD
 GROK_NO_HUD=1 grok -p "hi"    # bare CLI
 grok-hud status
-grok-hud settings             # language / preset / rows
+grok-hud info                 # aesthetic + optional chips + data priority
+grok-hud settings             # language / preset / aesthetic / chips a–d
 grok-hud lang en|zh|tw
 grok-build-hud --preset full|essential|minimal
 grok-build-hud --theme auto
@@ -130,6 +131,27 @@ Each Terminal tab gets an **independent** Grok session.
 
 ---
 
+## vs Claude Code HUD (capability map)
+
+| Capability | Claude Code HUD (reference) | **Grok Build HUD (this project)** |
+|------------|-----------------------------|-----------------------------------|
+| Host | Built-in statusLine | No Grok statusline → **same-window tmux** |
+| Context % | Yes | Yes (signals / estimate) |
+| Quota + reset | Yes | Yes + `timeFormat` + usage sidecar |
+| Token i/o/cache | Yes | Yes (`turn_completed`) |
+| Tools / agents / todos | Yes | Yes |
+| elementOrder / merge | Yes | Yes (0.4.1+) |
+| Aesthetics | Yes | classic / **codex** / dense |
+| Git file stats | Opt-in | Opt-in (0.7+, settings `a`) |
+| Compaction count | Opt-in | Opt-in (0.7+, settings `b`) |
+| Output tok/s | Opt-in | Opt-in (0.7+, settings `c`) |
+| Multi-terminal | Env-dependent | **Isolated session per Terminal** |
+| Official status | Community Claude plugin | **Third-party, not xAI official** |
+
+Architecture inspiration only — **no copied source** from Claude HUD.
+
+---
+
 ## Plugin layout
 
 ```text
@@ -139,7 +161,7 @@ commands/                # slash commands
 skills/grok-build-hud/   # agent skill
 hooks/hooks.json         # session hooks
 bin/ + src/              # CLI + HUD runtime
-scripts/install.sh       # one-shot installer
+scripts/install.sh       # one-shot installer (idempotent upgrade)
 ```
 
 ---
@@ -154,15 +176,45 @@ scripts/install.sh       # one-shot installer
 | **essential** | 2 | Model/git + context/usage + activity |
 | **minimal** | 1 | Dense single row |
 
+### Aesthetics (`aesthetic`)
+
+| aesthetic | density | look |
+|-----------|---------|------|
+| **classic** | comfortable | pipe + block bars (compat) |
+| **codex** (recommended) | compact | middot · thin · calm 窗+额 |
+| **dense** | dense | 1-line chip |
+
+### Optional chips (default off)
+
+```jsonc
+{
+  "display": {
+    "showGitFileStats": true,   // !M +A ✘D ?U
+    "showCompactions": true,    // cmp×N after first compact
+    "showSpeed": true           // tok/s
+  }
+}
+```
+
+Or toggle in `grok-hud settings` → **a / b / c / d**.
+
 `language`: `en` (default) / `zh-Hans` / `zh-Hant`
 
 Theme always tracks Grok `/theme` unless `GROK_HUD_LOCK=1`.
+
+**Usage data priority:** live billing → cache → `usage-sidecar.json` → unavailable.
 
 ---
 
 ## How it works
 
 Reads local `~/.grok/sessions/**`, uses existing Grok auth for billing, writes under `~/.grok/hud/`, displays via same-window tmux. Does **not** upload your code.
+
+Upgrade in place (keeps your `config.json` aesthetic):
+
+```bash
+git pull && bash scripts/install.sh
+```
 
 ---
 

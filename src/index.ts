@@ -297,10 +297,12 @@ Lifecycle: Terminal open → ready (not machine boot).
 `;
 }
 
-/** Print aesthetic / density / data priority (D5). */
+/** Print aesthetic / density / data priority / Phase C flags (D5+D). */
 export function formatHudInfo(grokHome: string): string {
   const cfg = loadHudConfig(grokHome);
   const cfgPath = path.join(grokHome, "hud", "config.json");
+  const d = cfg.display;
+  const onOff = (v: boolean | undefined) => (v ? "on" : "off");
   const lines = [
     `grok-build-hud info`,
     `  config:     ${cfgPath}`,
@@ -313,6 +315,13 @@ export function formatHudInfo(grokHome: string): string {
     `  usageEmphasisThreshold: ${cfg.usageEmphasisThreshold ?? 0}`,
     `  tokenRevealAtContextPercent: ${cfg.tokenRevealAtContextPercent ?? 0}`,
     ``,
+    `Optional chips (Phase C):`,
+    `  showGitFileStats:    ${onOff(d.showGitFileStats)}`,
+    `  showGitAheadBehind:  ${onOff(d.showGitAheadBehind !== false)}`,
+    `  showCompactions:     ${onOff(d.showCompactions)}`,
+    `  showSpeed:           ${onOff(d.showSpeed)}`,
+    `  showDiffStats:       ${onOff(d.showDiffStats)}`,
+    ``,
     `Data priority (usage %):`,
     `  1. live billing (cli-chat-proxy / xAI) → writes usage-sidecar.json`,
     `  2. in-memory cache → ~/.grok/hud/billing-cache.json`,
@@ -324,8 +333,9 @@ export function formatHudInfo(grokHome: string): string {
     `  2. events / turn_completed estimates`,
     `  3. empty / 0%`,
     ``,
-    `Status files: ~/.grok/hud/status*.txt  (content-fp skip-write when unchanged)`,
+    `Status files: ~/.grok/hud/status*.txt  (content-fp + dashboard skip-write)`,
     `Sidecar:      ~/.grok/hud/usage-sidecar.json`,
+    `Settings:     grok-hud settings  (a/b/c/d toggle optional chips)`,
   ];
   return lines.join("\n");
 }

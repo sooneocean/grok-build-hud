@@ -10,7 +10,7 @@ description: Grok Build 实时状态条（同窗口多行：上下文、配额�
 ## What it shows
 
 - Line 1: model · project · git · live · title · effort
-- Line 2: context bar + tokens · weekly/monthly usage · time · turns · tools · errors · diff
+- Line 2: context bar · usage · optional meta (compaction / speed when enabled)
 - Line 3: tool activity · agents · todos · GrokBuild product share
 
 Data sources (local):
@@ -19,6 +19,7 @@ Data sources (local):
 - `updates.jsonl` — tools / agents / todos / token usage
 - `summary.json` — title, effort, model
 - Grok auth → `cli-chat-proxy` billing for quota
+- `~/.grok/hud/usage-sidecar.json` — written on billing success; fallback if API misses
 
 ## Install once (plugin + HUD)
 
@@ -28,14 +29,16 @@ cd grok-build-hud
 bash scripts/install.sh
 ```
 
-One-shot: build CLI → install tmux dashboard → `grok plugin install . --trust`.
+One-shot: build CLI → install tmux dashboard → `grok plugin install . --trust`.  
+Re-run after `git pull` is safe (keeps existing `~/.grok/hud/config.json` aesthetic).
 
 ## Daily
 
 ```bash
 grok                              # wrapped: Grok + bottom HUD (same tab)
 grok-hud status                   # one-shot print
-grok-hud settings                 # language (default en; 中文可选), preset, rows
+grok-hud info                     # aesthetic + optional chips + data priority
+grok-hud settings                 # language / preset / aesthetic / chips a–d
 grok-hud lang en|zh|tw            # en default
 grok-build-hud --preset full|essential|minimal
 grok-build-hud --theme auto       # follow Grok [ui].theme
@@ -46,8 +49,13 @@ grok-hud stop                     # stop dashboard daemon
 
 - `/hud` `/status` `/quota` `/preset` `/setup` `/watch` `/settings` — see `commands/`
 
-## Config
+## Config highlights
 
-`~/.grok/hud/config.json` — language, presets, `bold`, `barWidth`, display toggles.
+`~/.grok/hud/config.json`
+
+- `aesthetic`: `classic` | `codex` | `dense`
+- `display.showGitFileStats` / `showCompactions` / `showSpeed` — Phase C opt-in (settings **a/b/c**)
+- `timeFormat`: `relative` | `absolute` | `both`
+- `usageEmphasisThreshold`: codex calm gate (default 80)
 
 文档（中文主文档）：[README.md](../../README.md) · English: [README.en.md](../../README.en.md)

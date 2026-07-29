@@ -188,11 +188,11 @@ grok-hud-run
 
 | 命令 | 作用 |
 |------|------|
-| `/hud` | 状态条相关说明 |
+| `/hud` | 状态条相关说明 + 数据优先级 |
 | `/status` | 打印当前状态 |
 | `/quota` | 配额相关 |
 | `/preset` | 切换 full / essential / minimal |
-| `/settings` | 语言、预设、行数 |
+| `/settings` | 语言、预设、美学、可选芯片 |
 | `/setup` | 安装 / 修复 dashboard |
 | `/watch` | 保持 HUD 实时更新说明 |
 
@@ -200,7 +200,8 @@ grok-hud-run
 
 ```bash
 grok-hud status
-grok-hud settings
+grok-hud info                 # aesthetic + 可选芯片 + 数据优先级
+grok-hud settings             # 含 a/b/c/d 开 git/压缩/速度
 grok-hud lang zh|en|tw
 grok-build-hud --preset full|essential|minimal
 grok-build-hud --theme auto
@@ -209,11 +210,33 @@ grok-hud stop
 
 ---
 
-## 设定（语言 / 预设）
+## 与 Claude HUD 对标（能力表）
+
+| 能力 | Claude Code HUD（参考） | **Grok Build HUD（本项目）** |
+|------|-------------------------|------------------------------|
+| 宿主 | Claude Code 内置 statusLine | Grok 无 statusline → **tmux 同窗底栏** |
+| 上下文 % | 有 | 有（signals / estimate） |
+| 配额 / 重置 | 有 | 有 + `timeFormat` + usage sidecar |
+| Token 入/出/缓 | 有 | 有（turn_completed） |
+| 工具 / agent / todo | 有 | 有 |
+| elementOrder / merge | 有 | 有（0.4.1+） |
+| 美学密度 | 有 | classic / **codex** / dense |
+| Git 文件统计 | 有（opt-in） | 有（0.7+，settings `a`） |
+| Compaction 计数 | 有（opt-in） | 有（0.7+，settings `b`） |
+| 输出 tok/s | 有（opt-in） | 有（0.7+，settings `c`） |
+| 多终端隔离 | 视环境 | **每 Terminal 独立 session** |
+| 官方身份 | 社区 Claude 插件 | **第三方，非 xAI 官方** |
+
+> 只学信息架构与冷静美学，**不复制** Claude HUD 源码。
+
+---
+
+## 设定（语言 / 预设 / 芯片）
 
 ```bash
-# 交互设定（默认界面为中文）
+# 交互设定
 grok-hud settings
+# 菜单：1 语言 · 2 预设 · 9 美学 · a/b/c/d 可选芯片 · 8 预览 · 0 保存
 
 # 快捷切语言
 grok-hud lang en    # English（默认）

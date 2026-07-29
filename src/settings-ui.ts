@@ -88,6 +88,22 @@ function printMenu(cfg: HudDisplayConfig, out: (s: string) => void): void {
     }`,
   );
   out(`│`);
+  out(`│  ${s.extrasHint}`);
+  out(
+    `│  a) ${s.gitFileStats.padEnd(14)}  [${cfg.display.showGitFileStats ? s.on : s.off}]`,
+  );
+  out(
+    `│  b) ${s.showCompactions.padEnd(14)}  [${cfg.display.showCompactions ? s.on : s.off}]`,
+  );
+  out(
+    `│  c) ${s.showSpeed.padEnd(14)}  [${cfg.display.showSpeed ? s.on : s.off}]`,
+  );
+  out(
+    `│  d) ${s.showAheadBehind.padEnd(14)}  [${
+      cfg.display.showGitAheadBehind !== false ? s.on : s.off
+    }]`,
+  );
+  out(`│`);
   out(`│  0) ${s.saveExit}`);
   out(`│  q) ${s.quitNoSave}`);
   out(`└──────────────────────────────────────`);
@@ -126,6 +142,10 @@ function samplePreview(cfg: HudDisplayConfig): string {
     title: "Preview HUD layout",
     branch: "main",
     gitDirty: true,
+    gitAhead: 1,
+    gitFileStats: { modified: 2, added: 1, deleted: 0, untracked: 1 },
+    compactionCount: 1,
+    outputTokensPerSecond: 38.2,
     tools: [
       {
         id: "1",
@@ -358,6 +378,51 @@ export async function runSettingsUi(
             out(`  ${line}`);
           }
         }
+        continue;
+      }
+      // Phase C opt-in chips (a–d)
+      if (ans === "a" || ans === "gitstats" || ans === "files") {
+        cfg = {
+          ...cfg,
+          display: {
+            ...cfg.display,
+            showGitFileStats: !cfg.display.showGitFileStats,
+          },
+        };
+        dirty = true;
+        continue;
+      }
+      if (ans === "b" || ans === "compact" || ans === "compactions") {
+        cfg = {
+          ...cfg,
+          display: {
+            ...cfg.display,
+            showCompactions: !cfg.display.showCompactions,
+          },
+        };
+        dirty = true;
+        continue;
+      }
+      if (ans === "c" || ans === "speed") {
+        cfg = {
+          ...cfg,
+          display: {
+            ...cfg.display,
+            showSpeed: !cfg.display.showSpeed,
+          },
+        };
+        dirty = true;
+        continue;
+      }
+      if (ans === "d" || ans === "ahead" || ans === "behind") {
+        cfg = {
+          ...cfg,
+          display: {
+            ...cfg.display,
+            showGitAheadBehind: cfg.display.showGitAheadBehind === false,
+          },
+        };
+        dirty = true;
         continue;
       }
       out(`  ${t(cfg.language).invalid}`);

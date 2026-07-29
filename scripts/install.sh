@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # One-shot installer: CLI + same-window HUD + Grok plugin registration
+# Idempotent: re-run after git pull to upgrade without clobbering user aesthetic.
 # Run from repo root: bash scripts/install.sh  |  npm run setup
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,6 +30,12 @@ if [[ "$NODE_MAJOR" -lt 18 ]]; then
   exit 1
 fi
 
+HUD_CFG="${GROK_HOME:-$HOME/.grok}/hud/config.json"
+HAS_USER_CFG=0
+if [[ -f "$HUD_CFG" ]]; then
+  HAS_USER_CFG=1
+fi
+
 echo "==> [1/5] 安装依赖"
 npm install
 
@@ -38,10 +45,18 @@ npm run build
 echo "==> [3/5] 链接 CLI 到 PATH (npm link)"
 npm link
 
-echo "==> [4/5] 安装 dashboard（tmux 多行状态条 + grok wrapper）"
+echo "==> [4/5] 安装 / 刷新 dashboard（tmux 多行状态条 + grok wrapper）"
 node bin/grok-build-hud.js --install-dashboard
 node bin/grok-build-hud.js --theme auto
-node bin/grok-build-hud.js --preset full
+# Phase D: do not stomp user aesthetic/preset on reinstall
+if [[ "$HAS_USER_CFG" -eq 0 ]]; then
+  echo "    first install: apply preset full"
+  node bin/grok-build-hud.js --preset full
+else
+  echo "    keep existing config: $HUD_CFG"
+  # ensure daemon picks up new binary
+  node bin/grok-build-hud.js --dashboard-start >/dev/null 2>&1 || true
+fi
 
 echo "==> [5/5] 注册为本地 Grok 插件（第三方 / 非官方 marketplace）"
 if command -v grok >/dev/null 2>&1; then
@@ -71,13 +86,14 @@ echo "完成。grok-build-hud v${VER}（第三方插件 + 同窗口 HUD，非 xA
 echo ""
 echo "  启动 Grok + 底部 HUD：  grok"
 echo "  看当前状态一次：        grok-hud status"
-echo "  设定（语言/预设）：     grok-hud settings"
+echo "  设定（语言/美学/芯片）： grok-hud settings"
+echo "  当前配置摘要：          grok-hud info"
 echo "  会话斜杠命令：          /hud /status /settings /setup …"
 echo "  主题跟随 Grok：         grok-build-hud --theme auto"
 echo "  停止后台刷新：          grok-hud stop"
 echo "  插件详情：              grok plugin details grok-build-hud"
 echo ""
+if [[ "$HAS_USER_CFG" -eq 1 ]]; then
+  echo "  提示：已有 config 未强制改 preset；美学/可选芯片用 grok-hud settings"
+fi
 echo "若 hooks 未生效：在 Grok 内 /hooks 后按 r 重载"
-echo "文档（中文）：README.md  ·  English: README.en.md"
-echo "若 command not found，把下面加入 PATH 后重开终端："
-echo "  export PATH=\"\$(npm prefix -g)/bin:\$HOME/.local/bin:\$PATH\""

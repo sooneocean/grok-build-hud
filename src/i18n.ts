@@ -61,6 +61,12 @@ export interface HudStrings {
   aestheticClassic: string;
   aestheticCodex: string;
   aestheticDense: string;
+  /** Phase C opt-in chips in settings */
+  gitFileStats: string;
+  showCompactions: string;
+  showSpeed: string;
+  showAheadBehind: string;
+  extrasHint: string;
 }
 
 const ZH_HANS: HudStrings = {
@@ -115,6 +121,11 @@ const ZH_HANS: HudStrings = {
   aestheticClassic: "经典 (工程面板)",
   aestheticCodex: "Codex 冷静",
   aestheticDense: "极简芯片",
+  gitFileStats: "Git 文件统计 !M+A",
+  showCompactions: "压缩次数",
+  showSpeed: "输出速度 tok/s",
+  showAheadBehind: "Git ↑↓ 远程",
+  extrasHint: "可选芯片（默认关，不挤主视线）",
 };
 
 const ZH_HANT: HudStrings = {
@@ -169,6 +180,11 @@ const ZH_HANT: HudStrings = {
   aestheticClassic: "經典 (工程面板)",
   aestheticCodex: "Codex 冷靜",
   aestheticDense: "極簡芯片",
+  gitFileStats: "Git 檔案統計 !M+A",
+  showCompactions: "壓縮次數",
+  showSpeed: "輸出速度 tok/s",
+  showAheadBehind: "Git ↑↓ 遠端",
+  extrasHint: "可選芯片（預設關）",
 };
 
 const EN: HudStrings = {
@@ -223,6 +239,11 @@ const EN: HudStrings = {
   aestheticClassic: "Classic (full chrome)",
   aestheticCodex: "Codex calm",
   aestheticDense: "Dense chips",
+  gitFileStats: "Git file stats !M+A",
+  showCompactions: "Compaction count",
+  showSpeed: "Output speed tok/s",
+  showAheadBehind: "Git ↑↓ remote",
+  extrasHint: "Optional chips (off by default)",
 };
 
 export function normalizeLang(raw?: string | null): HudLang {
