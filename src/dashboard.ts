@@ -36,6 +36,207 @@ export function dashboardPidPath(grokHome = defaultGrokHome()): string {
   return path.join(grokHome, "hud", "dashboard.pid");
 }
 
+export function dashboardLockPath(grokHome = defaultGrokHome()): string {
+  return path.join(grokHome, "hud", "dashboard.lock");
+}
+
+export function dashboardLogPath(grokHome = defaultGrokHome()): string {
+  return path.join(grokHome, "hud", "dashboard.log");
+}
+
+function isOurDashboardCommand(cmd: string): boolean {
+  const c = cmd.toLowerCase();
+  return (
+    c.includes("dashboard") ||
+    c.includes("grok-build-hud") ||
+    c.includes("grok-hud")
+  );
+}
+
+function processCommandLine(pid: number): string | null {
+  try {
+    return execFileSync("ps", ["-p", String(pid), "-o", "command="], {
+      encoding: "utf8",
+      timeout: 1000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function isAlivePid(pid: number): boolean {
+  if (!Number.isFinite(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Exclusive single-writer lock for the dashboard daemon (1.8).
+ * Uses O_EXCL create; steals lock only if holder pid is dead / not ours.
+ */
+export function tryAcquireDashboardLock(
+  grokHome = defaultGrokHome(),
+  options: { pid?: number } = {},
+): { acquired: boolean; reason?: string; holderPid?: number } {
+  const lockPath = dashboardLockPath(grokHome);
+  const pid = options.pid ?? process.pid;
+  fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+
+  const tryCreate = (): boolean => {
+    try {
+      const fd = fs.openSync(lockPath, "wx");
+      try {
+        fs.writeFileSync(fd, `${pid}\n${Date.now()}\n`, "utf8");
+      } finally {
+        fs.closeSync(fd);
+      }
+      return true;
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException;
+      if (err.code === "EEXIST") return false;
+      throw e;
+    }
+  };
+
+  if (tryCreate()) return { acquired: true };
+
+  // Lock exists — inspect holder
+  let holderPid = 0;
+  try {
+    const raw = fs.readFileSync(lockPath, "utf8").trim().split(/\n/)[0] ?? "";
+    holderPid = Number(raw);
+  } catch {
+    holderPid = 0;
+  }
+
+  if (holderPid === pid) {
+    return { acquired: true };
+  }
+
+  if (holderPid > 0 && isAlivePid(holderPid)) {
+    const cmd = processCommandLine(holderPid) ?? "";
+    if (isOurDashboardCommand(cmd)) {
+      return {
+        acquired: false,
+        reason: `held by live dashboard pid ${holderPid}`,
+        holderPid,
+      };
+    }
+    // Alive but not our daemon — steal carefully (recycled pid)
+  }
+
+  // Stale or foreign — remove and retry once
+  try {
+    fs.unlinkSync(lockPath);
+  } catch {
+    /* race */
+  }
+  if (tryCreate()) return { acquired: true };
+  return {
+    acquired: false,
+    reason: "could not acquire lock (race)",
+    holderPid: holderPid || undefined,
+  };
+}
+
+export function releaseDashboardLock(
+  grokHome = defaultGrokHome(),
+  options: { pid?: number } = {},
+): void {
+  const lockPath = dashboardLockPath(grokHome);
+  const pid = options.pid ?? process.pid;
+  try {
+    if (!fs.existsSync(lockPath)) return;
+    const raw = fs.readFileSync(lockPath, "utf8").trim().split(/\n/)[0] ?? "";
+    const holder = Number(raw);
+    if (holder === pid || !Number.isFinite(holder) || holder <= 0) {
+      fs.unlinkSync(lockPath);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Recent dashboard.log refresh errors for doctor (1.8). */
+export function inspectDashboardLog(
+  grokHome = defaultGrokHome(),
+  options: { now?: number; recentMs?: number; maxTailBytes?: number } = {},
+): {
+  path: string;
+  exists: boolean;
+  recentErrorCount: number;
+  lastErrorLine: string | null;
+  lastErrorAgeMs: number | null;
+} {
+  const logPath = dashboardLogPath(grokHome);
+  const now = options.now ?? Date.now();
+  const recentMs = options.recentMs ?? 15 * 60_000;
+  const maxTail = options.maxTailBytes ?? 32_000;
+  if (!fs.existsSync(logPath)) {
+    return {
+      path: logPath,
+      exists: false,
+      recentErrorCount: 0,
+      lastErrorLine: null,
+      lastErrorAgeMs: null,
+    };
+  }
+  try {
+    const st = fs.statSync(logPath);
+    let text: string;
+    if (st.size <= maxTail) {
+      text = fs.readFileSync(logPath, "utf8");
+    } else {
+      const fd = fs.openSync(logPath, "r");
+      try {
+        const buf = Buffer.alloc(maxTail);
+        fs.readSync(fd, buf, 0, maxTail, st.size - maxTail);
+        text = buf.toString("utf8");
+        const nl = text.indexOf("\n");
+        if (nl >= 0) text = text.slice(nl + 1);
+      } finally {
+        fs.closeSync(fd);
+      }
+    }
+    const lines = text.split(/\n/).filter((l) => l.includes("refresh error"));
+    let recentErrorCount = 0;
+    let lastErrorLine: string | null = null;
+    let lastErrorAgeMs: number | null = null;
+    for (const line of lines) {
+      const m = line.match(/^\[([^\]]+)\]/);
+      if (!m) continue;
+      const t = Date.parse(m[1]!);
+      if (!Number.isFinite(t)) continue;
+      const age = now - t;
+      if (age >= 0 && age <= recentMs) {
+        recentErrorCount += 1;
+        lastErrorLine = line.slice(0, 200);
+        lastErrorAgeMs = age;
+      }
+    }
+    return {
+      path: logPath,
+      exists: true,
+      recentErrorCount,
+      lastErrorLine,
+      lastErrorAgeMs,
+    };
+  } catch {
+    return {
+      path: logPath,
+      exists: true,
+      recentErrorCount: 0,
+      lastErrorLine: null,
+      lastErrorAgeMs: null,
+    };
+  }
+}
+
 export function titleLine(
   session: SessionSnapshot,
   usage?: UsageSnapshot | null,
@@ -445,23 +646,86 @@ export function isDashboardRunning(grokHome = defaultGrokHome()): boolean {
     if (!fs.existsSync(p)) return false;
     const pid = Number(fs.readFileSync(p, "utf8").trim());
     if (!Number.isFinite(pid) || pid <= 0) return false;
-    process.kill(pid, 0);
+    if (!isAlivePid(pid)) return false;
     // Confirm it's actually our dashboard (not a recycled pid)
-    try {
-      const cmd = execFileSync("ps", ["-p", String(pid), "-o", "command="], {
-        encoding: "utf8",
-        timeout: 1000,
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      if (!cmd.includes("dashboard") && !cmd.includes("grok-build-hud")) {
-        return false;
-      }
-    } catch {
-      return false;
-    }
+    const cmd = processCommandLine(pid);
+    if (!cmd || !isOurDashboardCommand(cmd)) return false;
     return true;
   } catch {
     return false;
+  }
+}
+
+/** Pid file present but process dead / foreign (doctor stale check). */
+export function inspectDashboardPidFile(grokHome = defaultGrokHome()): {
+  path: string;
+  exists: boolean;
+  pid: number | null;
+  running: boolean;
+  stale: boolean;
+  detail: string;
+} {
+  const p = dashboardPidPath(grokHome);
+  if (!fs.existsSync(p)) {
+    return {
+      path: p,
+      exists: false,
+      pid: null,
+      running: false,
+      stale: false,
+      detail: "no pid file",
+    };
+  }
+  try {
+    const pid = Number(fs.readFileSync(p, "utf8").trim());
+    if (!Number.isFinite(pid) || pid <= 0) {
+      return {
+        path: p,
+        exists: true,
+        pid: null,
+        running: false,
+        stale: true,
+        detail: "pid file unreadable",
+      };
+    }
+    if (!isAlivePid(pid)) {
+      return {
+        path: p,
+        exists: true,
+        pid,
+        running: false,
+        stale: true,
+        detail: `stale pid ${pid} (process gone)`,
+      };
+    }
+    const cmd = processCommandLine(pid) ?? "";
+    if (!isOurDashboardCommand(cmd)) {
+      return {
+        path: p,
+        exists: true,
+        pid,
+        running: false,
+        stale: true,
+        detail: `pid ${pid} alive but not dashboard (${cmd.slice(0, 60)})`,
+      };
+    }
+    return {
+      path: p,
+      exists: true,
+      pid,
+      running: true,
+      stale: false,
+      detail: `running pid ${pid}`,
+    };
+  } catch {
+    return {
+      path: p,
+      exists: true,
+      pid: null,
+      running: false,
+      stale: true,
+      detail: "pid file read error",
+    };
   }
 }
 
@@ -489,30 +753,49 @@ export function stopAllDashboardDaemons(grokHome = defaultGrokHome()): number {
   } catch {
     /* ignore */
   }
-  // Sweep orphans matching our entry pattern
+  // Sweep orphans matching our entry patterns (1.8: broader argv shapes)
   try {
     // Match "--dashboard" as its own argv token (not "--dashboard-start")
-    const out = execFileSync(
-      "pgrep",
-      ["-f", "grok-build-hud.*(dist/src/index\\.js|bin/grok-build-hud\\.js) --dashboard "],
-      {
-        encoding: "utf8",
-        timeout: 2000,
-        stdio: ["ignore", "pipe", "ignore"],
-      },
-    ).trim();
-    for (const line of out.split(/\n/)) {
-      const pid = Number(line.trim());
-      if (!Number.isFinite(pid) || pid <= 0 || pid === process.pid) continue;
+    const patterns = [
+      "grok-build-hud.*(dist/src/index\\.js|bin/grok-build-hud\\.js) --dashboard ",
+      "index\\.js --dashboard ",
+      "grok-hud.*--dashboard ",
+    ];
+    const seen = new Set<number>();
+    for (const pat of patterns) {
       try {
-        process.kill(pid, "SIGTERM");
-        killed += 1;
+        const out = execFileSync("pgrep", ["-f", pat], {
+          encoding: "utf8",
+          timeout: 2000,
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+        for (const line of out.split(/\n/)) {
+          const pid = Number(line.trim());
+          if (!Number.isFinite(pid) || pid <= 0 || pid === process.pid) continue;
+          if (seen.has(pid)) continue;
+          seen.add(pid);
+          try {
+            process.kill(pid, "SIGTERM");
+            killed += 1;
+          } catch {
+            /* ignore */
+          }
+        }
       } catch {
-        /* ignore */
+        /* no matches for this pattern */
       }
     }
   } catch {
     /* no matches */
+  }
+  // Drop lock if we own stop (holder dead or any)
+  try {
+    releaseDashboardLock(grokHome);
+    // Force-clear lock after stop sweep
+    const lp = dashboardLockPath(grokHome);
+    if (fs.existsSync(lp)) fs.unlinkSync(lp);
+  } catch {
+    /* ignore */
   }
   return killed;
 }
@@ -634,7 +917,7 @@ export function appendDashboardError(
   if (now - last < minInterval) return;
   lastDashboardErrorAt.set(grokHome, now);
   try {
-    const logPath = path.join(grokHome, "hud", "dashboard.log");
+    const logPath = dashboardLogPath(grokHome);
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
     const msg = err instanceof Error ? err.stack || err.message : String(err);
     const line = `[${new Date(now).toISOString()}] refresh error: ${msg}\n`;
@@ -665,6 +948,15 @@ export async function runDashboardLoop(options: {
 
   if (options.writePid !== false) {
     fs.mkdirSync(path.join(grokHome, "hud"), { recursive: true });
+    // Exclusive lock first (1.8) — stronger than pid TOCTOU alone
+    const lock = tryAcquireDashboardLock(grokHome);
+    if (!lock.acquired) {
+      appendDashboardError(
+        grokHome,
+        new Error(lock.reason ?? "dashboard lock not acquired — exiting"),
+      );
+      return 1;
+    }
     // Refuse to dual-write if another live dashboard owns the pid file (1.7)
     try {
       const p = dashboardPidPath(grokHome);
@@ -675,28 +967,18 @@ export async function runDashboardLoop(options: {
           existing > 0 &&
           existing !== process.pid
         ) {
-          try {
-            process.kill(existing, 0);
-            const cmd = execFileSync(
-              "ps",
-              ["-p", String(existing), "-o", "command="],
-              {
-                encoding: "utf8",
-                timeout: 1000,
-                stdio: ["ignore", "pipe", "ignore"],
-              },
-            );
-            if (cmd.includes("dashboard") || cmd.includes("grok-build-hud")) {
+          if (isAlivePid(existing)) {
+            const cmd = processCommandLine(existing) ?? "";
+            if (isOurDashboardCommand(cmd)) {
               appendDashboardError(
                 grokHome,
                 new Error(
                   `another dashboard pid ${existing} is running — exiting`,
                 ),
               );
+              releaseDashboardLock(grokHome);
               return 1;
             }
-          } catch {
-            /* stale pid — take over */
           }
         }
       }
@@ -716,6 +998,7 @@ export async function runDashboardLoop(options: {
     } catch {
       /* ignore */
     }
+    releaseDashboardLock(grokHome);
   };
   process.on("SIGTERM", () => {
     cleanup();

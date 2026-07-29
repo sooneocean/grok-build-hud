@@ -30,9 +30,10 @@ Checks (local only, no network required for most):
 | tmux | required for same-window strip |
 | CLI on PATH | `grok-hud` / `grok-build-hud` |
 | Build (dist/) | compiled package |
-| HUD config | `~/.grok/hud/config.json` parse |
+| HUD config | `~/.grok/hud/config.json` parse (**fail** if invalid JSON) |
 | Grok auth | credentials for quota |
-| Dashboard daemon | pid alive |
+| Dashboard daemon | pid alive; **warn** on stale pid file |
+| Dashboard log | recent `refresh error` lines in `dashboard.log` (last 15m) |
 | Status files | `status.txt` freshness |
 | Hooks | `~/.grok/hooks/grok-build-hud.json` |
 | Plugin | installed-plugins version match |

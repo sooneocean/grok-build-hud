@@ -406,8 +406,154 @@ const hudConfigCache = new Map<
   { mtimeMs: number; cfg: HudDisplayConfig }
 >();
 
+/** Last load error per grokHome (doctor / diagnostics; 1.8). */
+const lastHudConfigLoadError = new Map<string, string>();
+
 export function clearHudConfigCache(): void {
   hudConfigCache.clear();
+  lastHudConfigLoadError.clear();
+}
+
+export function getLastHudConfigLoadError(grokHome: string): string | null {
+  return lastHudConfigLoadError.get(grokHome) ?? null;
+}
+
+function defaultFallbackConfig(): HudDisplayConfig {
+  return {
+    ...PRESET_FULL,
+    language: "en",
+    elementOrder: [...DEFAULT_ELEMENT_ORDER],
+    mergeGroups: DEFAULT_MERGE_GROUPS.map((g) => [...g]),
+    projectLineOrder: [...DEFAULT_PROJECT_LINE_ORDER],
+    display: { ...PRESET_FULL.display },
+  };
+}
+
+function mergeRawHudConfig(raw: Partial<HudDisplayConfig>): HudDisplayConfig {
+  const base =
+    raw.preset === "minimal"
+      ? PRESET_MINIMAL
+      : raw.preset === "essential"
+        ? PRESET_ESSENTIAL
+        : PRESET_FULL;
+  const elementOrder =
+    sanitizeElementOrder(raw.elementOrder) ??
+    (base.elementOrder ? [...base.elementOrder] : [...DEFAULT_ELEMENT_ORDER]);
+  const mergeGroups =
+    sanitizeMergeGroups(raw.mergeGroups) ??
+    (base.mergeGroups
+      ? base.mergeGroups.map((g) => [...g])
+      : DEFAULT_MERGE_GROUPS.map((g) => [...g]));
+  const projectLineOrder =
+    sanitizeProjectLineOrder(raw.projectLineOrder) ??
+    (base.projectLineOrder
+      ? [...base.projectLineOrder]
+      : [...DEFAULT_PROJECT_LINE_ORDER]);
+  const aesthetic = normalizeAesthetic(raw.aesthetic ?? base.aesthetic);
+  const calmAesthetic = aesthetic === "codex" || aesthetic === "dense";
+  return {
+    ...base,
+    ...raw,
+    language: raw.language ?? base.language ?? "en",
+    bold: raw.bold ?? base.bold ?? true,
+    barWidth: raw.barWidth ?? base.barWidth ?? 14,
+    statusLines: raw.statusLines ?? base.statusLines ?? 3,
+    elementOrder,
+    mergeGroups,
+    projectLineOrder,
+    alignLabels: raw.alignLabels ?? base.alignLabels ?? true,
+    aesthetic,
+    density: normalizeDensity(raw.density ?? base.density),
+    separator: normalizeSeparator(raw.separator ?? base.separator),
+    barStyle: normalizeBarStyle(raw.barStyle ?? base.barStyle),
+    tokenRevealAtContextPercent:
+      typeof raw.tokenRevealAtContextPercent === "number"
+        ? raw.tokenRevealAtContextPercent
+        : calmAesthetic
+          ? (base.tokenRevealAtContextPercent ?? 70)
+          : (base.tokenRevealAtContextPercent ?? 0),
+    colors: {
+      ...(base.colors ?? {}),
+      ...((raw.colors as HudDisplayConfig["colors"]) ?? {}),
+    },
+    warningThreshold:
+      typeof raw.warningThreshold === "number"
+        ? raw.warningThreshold
+        : (base.warningThreshold ?? 70),
+    criticalThreshold:
+      typeof raw.criticalThreshold === "number"
+        ? raw.criticalThreshold
+        : (base.criticalThreshold ?? 90),
+    timeFormat: normalizeTimeFormat(
+      raw.timeFormat ?? base.timeFormat ?? "relative",
+    ),
+    usageEmphasisThreshold:
+      typeof raw.usageEmphasisThreshold === "number"
+        ? raw.usageEmphasisThreshold
+        : calmAesthetic
+          ? 80
+          : (base.usageEmphasisThreshold ?? 0),
+    autoDenseBelow:
+      typeof raw.autoDenseBelow === "number"
+        ? raw.autoDenseBelow
+        : calmAesthetic
+          ? 60
+          : (base.autoDenseBelow ?? 0),
+    externalUsagePath: raw.externalUsagePath ?? base.externalUsagePath,
+    externalUsageWritePath:
+      raw.externalUsageWritePath ?? base.externalUsageWritePath,
+    externalUsageFreshnessMs:
+      typeof raw.externalUsageFreshnessMs === "number"
+        ? raw.externalUsageFreshnessMs
+        : (base.externalUsageFreshnessMs ?? 300_000),
+    display: {
+      ...base.display,
+      ...(raw.display ?? {}),
+      usageValue:
+        raw.display?.usageValue === "remaining" ||
+        raw.display?.usageValue === "percent"
+          ? raw.display.usageValue
+          : base.display.usageValue ?? "percent",
+      contextValue: normalizeContextValue(
+        raw.display?.contextValue ?? base.display.contextValue,
+      ),
+    },
+  };
+}
+
+/** Doctor-facing probe — does not swallow bad JSON (1.8). */
+export type HudConfigProbe =
+  | { status: "missing"; path: string }
+  | { status: "ok"; path: string; cfg: HudDisplayConfig }
+  | { status: "invalid"; path: string; error: string };
+
+export function probeHudConfig(
+  grokHome = path.join(os.homedir(), ".grok"),
+): HudConfigProbe {
+  const p = configPath(grokHome);
+  if (!fs.existsSync(p)) {
+    return { status: "missing", path: p };
+  }
+  try {
+    const text = fs.readFileSync(p, "utf8");
+    const raw = JSON.parse(text) as Partial<HudDisplayConfig>;
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      return {
+        status: "invalid",
+        path: p,
+        error: "config root must be a JSON object",
+      };
+    }
+    const mtimeMs = fs.statSync(p).mtimeMs;
+    const cfg = mergeRawHudConfig(raw);
+    hudConfigCache.set(grokHome, { mtimeMs, cfg });
+    lastHudConfigLoadError.delete(grokHome);
+    return { status: "ok", path: p, cfg };
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    lastHudConfigLoadError.set(grokHome, error);
+    return { status: "invalid", path: p, error };
+  }
 }
 
 export function loadHudConfig(
@@ -416,14 +562,8 @@ export function loadHudConfig(
   try {
     const p = configPath(grokHome);
     if (!fs.existsSync(p)) {
-      return {
-        ...PRESET_FULL,
-        language: "en",
-        elementOrder: [...DEFAULT_ELEMENT_ORDER],
-        mergeGroups: DEFAULT_MERGE_GROUPS.map((g) => [...g]),
-        projectLineOrder: [...DEFAULT_PROJECT_LINE_ORDER],
-        display: { ...PRESET_FULL.display },
-      };
+      lastHudConfigLoadError.delete(grokHome);
+      return defaultFallbackConfig();
     }
     const mtimeMs = fs.statSync(p).mtimeMs;
     const hit = hudConfigCache.get(grokHome);
@@ -431,107 +571,17 @@ export function loadHudConfig(
       return hit.cfg;
     }
     const raw = JSON.parse(fs.readFileSync(p, "utf8")) as Partial<HudDisplayConfig>;
-    const base =
-      raw.preset === "minimal"
-        ? PRESET_MINIMAL
-        : raw.preset === "essential"
-          ? PRESET_ESSENTIAL
-          : PRESET_FULL;
-    const elementOrder =
-      sanitizeElementOrder(raw.elementOrder) ??
-      (base.elementOrder ? [...base.elementOrder] : [...DEFAULT_ELEMENT_ORDER]);
-    const mergeGroups =
-      sanitizeMergeGroups(raw.mergeGroups) ??
-      (base.mergeGroups
-        ? base.mergeGroups.map((g) => [...g])
-        : DEFAULT_MERGE_GROUPS.map((g) => [...g]));
-    const projectLineOrder =
-      sanitizeProjectLineOrder(raw.projectLineOrder) ??
-      (base.projectLineOrder
-        ? [...base.projectLineOrder]
-        : [...DEFAULT_PROJECT_LINE_ORDER]);
-    const aesthetic = normalizeAesthetic(raw.aesthetic ?? base.aesthetic);
-    const calmAesthetic = aesthetic === "codex" || aesthetic === "dense";
-    const cfg: HudDisplayConfig = {
-      ...base,
-      ...raw,
-      language: raw.language ?? base.language ?? "en",
-      bold: raw.bold ?? base.bold ?? true,
-      barWidth: raw.barWidth ?? base.barWidth ?? 14,
-      statusLines: raw.statusLines ?? base.statusLines ?? 3,
-      elementOrder,
-      mergeGroups,
-      projectLineOrder,
-      alignLabels: raw.alignLabels ?? base.alignLabels ?? true,
-      aesthetic,
-      density: normalizeDensity(raw.density ?? base.density),
-      separator: normalizeSeparator(raw.separator ?? base.separator),
-      barStyle: normalizeBarStyle(raw.barStyle ?? base.barStyle),
-      tokenRevealAtContextPercent:
-        typeof raw.tokenRevealAtContextPercent === "number"
-          ? raw.tokenRevealAtContextPercent
-          : calmAesthetic
-            ? (base.tokenRevealAtContextPercent ?? 70)
-            : (base.tokenRevealAtContextPercent ?? 0),
-      colors: {
-        ...(base.colors ?? {}),
-        ...((raw.colors as HudDisplayConfig["colors"]) ?? {}),
-      },
-      warningThreshold:
-        typeof raw.warningThreshold === "number"
-          ? raw.warningThreshold
-          : (base.warningThreshold ?? 70),
-      criticalThreshold:
-        typeof raw.criticalThreshold === "number"
-          ? raw.criticalThreshold
-          : (base.criticalThreshold ?? 90),
-      timeFormat: normalizeTimeFormat(
-        raw.timeFormat ?? base.timeFormat ?? "relative",
-      ),
-      usageEmphasisThreshold:
-        typeof raw.usageEmphasisThreshold === "number"
-          ? raw.usageEmphasisThreshold
-          : calmAesthetic
-            ? 80
-            : (base.usageEmphasisThreshold ?? 0),
-      // Explicit 0 in JSON disables; missing field → 60 for codex/dense, else 0
-      autoDenseBelow:
-        typeof raw.autoDenseBelow === "number"
-          ? raw.autoDenseBelow
-          : calmAesthetic
-            ? 60
-            : (base.autoDenseBelow ?? 0),
-      externalUsagePath: raw.externalUsagePath ?? base.externalUsagePath,
-      externalUsageWritePath:
-        raw.externalUsageWritePath ?? base.externalUsageWritePath,
-      externalUsageFreshnessMs:
-        typeof raw.externalUsageFreshnessMs === "number"
-          ? raw.externalUsageFreshnessMs
-          : (base.externalUsageFreshnessMs ?? 300_000),
-      display: {
-        ...base.display,
-        ...(raw.display ?? {}),
-        usageValue:
-          raw.display?.usageValue === "remaining" ||
-          raw.display?.usageValue === "percent"
-            ? raw.display.usageValue
-            : base.display.usageValue ?? "percent",
-        contextValue: normalizeContextValue(
-          raw.display?.contextValue ?? base.display.contextValue,
-        ),
-      },
-    };
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new Error("config root must be a JSON object");
+    }
+    const cfg = mergeRawHudConfig(raw);
     hudConfigCache.set(grokHome, { mtimeMs, cfg });
+    lastHudConfigLoadError.delete(grokHome);
     return cfg;
-  } catch {
-    return {
-      ...PRESET_FULL,
-      language: "en",
-      elementOrder: [...DEFAULT_ELEMENT_ORDER],
-      mergeGroups: DEFAULT_MERGE_GROUPS.map((g) => [...g]),
-      projectLineOrder: [...DEFAULT_PROJECT_LINE_ORDER],
-      display: { ...PRESET_FULL.display },
-    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    lastHudConfigLoadError.set(grokHome, msg);
+    return defaultFallbackConfig();
   }
 }
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.8.0
+
+### Ops observability — doctor + single-writer lock
+- **`probeHudConfig`**: invalid `config.json` is **fail** in doctor (runtime still
+  falls back to preset so the bar does not crash).
+- **Dashboard log check**: doctor warns on `refresh error` lines in
+  `~/.grok/hud/dashboard.log` from the last 15 minutes.
+- **Stale pid file**: doctor warns when pid file points at a dead/foreign process.
+- **`dashboard.lock`**: exclusive `O_EXCL` lock for daemon single-writer; steal
+  only if holder is dead; released on stop/cleanup.
+- **Orphan sweep**: broader `pgrep` patterns (`index.js --dashboard`, `grok-hud`).
+- Docs: `commands/doctor.md` table updated.
+
 ## 1.7.0
 
 ### Stability — correct caches, observable daemon

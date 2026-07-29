@@ -12,11 +12,14 @@ import {
   ensureDashboardDaemon,
   refreshDashboard,
   stopDashboard,
+  inspectDashboardLog,
+  inspectDashboardPidFile,
 } from "./dashboard.js";
 import {
   loadHudConfig,
   configPath,
   ensureDefaultConfig,
+  probeHudConfig,
 } from "./hud-config.js";
 import { packageRoot, installGlobalHooks } from "./install.js";
 import { writeTmuxConfFile, applyTmuxStatusBar } from "./tmux-hud.js";
@@ -148,31 +151,29 @@ export function runDoctor(
     });
   }
 
-  // Config
-  const cfgPath = configPath(grokHome);
-  if (fs.existsSync(cfgPath)) {
-    try {
-      const cfg = loadHudConfig(grokHome);
-      checks.push({
-        id: "config",
-        level: "ok",
-        title: "HUD config",
-        detail: `${cfgPath} · aesthetic=${cfg.aesthetic ?? "classic"} · lang=${cfg.language ?? "en"} · autoDenseBelow=${cfg.autoDenseBelow ?? 0}`,
-      });
-    } catch (e) {
-      checks.push({
-        id: "config",
-        level: "fail",
-        title: "HUD config",
-        detail: `parse error: ${e instanceof Error ? e.message : String(e)}`,
-      });
-    }
+  // Config (probe — invalid JSON is fail, not silent preset) (1.8)
+  const probe = probeHudConfig(grokHome);
+  if (probe.status === "ok") {
+    const cfg = probe.cfg;
+    checks.push({
+      id: "config",
+      level: "ok",
+      title: "HUD config",
+      detail: `${probe.path} · aesthetic=${cfg.aesthetic ?? "classic"} · lang=${cfg.language ?? "en"} · autoDenseBelow=${cfg.autoDenseBelow ?? 0}`,
+    });
+  } else if (probe.status === "invalid") {
+    checks.push({
+      id: "config",
+      level: "fail",
+      title: "HUD config",
+      detail: `invalid JSON — ${probe.error} (${probe.path}); runtime falls back to preset until fixed`,
+    });
   } else {
     checks.push({
       id: "config",
       level: "warn",
       title: "HUD config",
-      detail: `missing ${cfgPath} — will create on first settings/save`,
+      detail: `missing ${probe.path} — will create on first settings/save`,
     });
   }
 
@@ -186,16 +187,60 @@ export function runDoctor(
       : "no auth file — run grok login for usage chip",
   });
 
-  // Dashboard
+  // Dashboard pid + lock health (1.8)
+  const pidInfo = inspectDashboardPidFile(grokHome);
   const dash = isDashboardRunning(grokHome);
-  checks.push({
-    id: "dashboard",
-    level: dash ? "ok" : "warn",
-    title: "Dashboard daemon",
-    detail: dash
-      ? `running (pid file ${path.join(grokHome, "hud", "dashboard.pid")})`
-      : "not running — grok-hud start or open Terminal with install hook",
-  });
+  if (dash) {
+    checks.push({
+      id: "dashboard",
+      level: "ok",
+      title: "Dashboard daemon",
+      detail: pidInfo.detail,
+    });
+  } else if (pidInfo.stale) {
+    checks.push({
+      id: "dashboard",
+      level: "warn",
+      title: "Dashboard daemon",
+      detail: `${pidInfo.detail} — run grok-hud doctor --fix or grok-hud start`,
+    });
+  } else {
+    checks.push({
+      id: "dashboard",
+      level: "warn",
+      title: "Dashboard daemon",
+      detail: "not running — grok-hud start or open Terminal with install hook",
+    });
+  }
+
+  // Dashboard error log (rate-limited refresh failures) (1.8)
+  const logInfo = inspectDashboardLog(grokHome, { now, recentMs: 15 * 60_000 });
+  if (!logInfo.exists) {
+    checks.push({
+      id: "dashboard-log",
+      level: "ok",
+      title: "Dashboard log",
+      detail: "no dashboard.log yet (clean)",
+    });
+  } else if (logInfo.recentErrorCount > 0) {
+    const ageS =
+      logInfo.lastErrorAgeMs != null
+        ? `${Math.round(logInfo.lastErrorAgeMs / 1000)}s ago`
+        : "recent";
+    checks.push({
+      id: "dashboard-log",
+      level: "warn",
+      title: "Dashboard log",
+      detail: `${logInfo.recentErrorCount} refresh error(s) in last 15m (${ageS}) — ${logInfo.path}${logInfo.lastErrorLine ? `: ${logInfo.lastErrorLine}` : ""}`,
+    });
+  } else {
+    checks.push({
+      id: "dashboard-log",
+      level: "ok",
+      title: "Dashboard log",
+      detail: `${logInfo.path} (no recent refresh errors)`,
+    });
+  }
 
   // Status freshness
   const statusPath = path.join(grokHome, "hud", "status.txt");
