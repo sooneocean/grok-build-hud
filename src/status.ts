@@ -20,14 +20,19 @@ import type {
 } from "./types.js";
 import { defaultGrokHome } from "./session.js";
 import {
+  applyColorOverrides,
   miniBar,
+  severityRole,
+  tmuxLiveMark,
   tmuxRole,
   resolveTheme,
   THEME_CODEX,
+  THEME_CODEX_LIGHT,
   isLightTheme,
   type HudTheme,
 } from "./theme.js";
 import {
+  barChars,
   loadHudConfig,
   type HudDisplayConfig,
 } from "./hud-config.js";
@@ -52,16 +57,19 @@ export function hudDataDir(grokHome = defaultGrokHome()): string {
   return path.join(grokHome, "hud");
 }
 
-/** Prefer Codex calm palette when aesthetic=codex and Grok theme is dark. */
+/**
+ * Palette for HUD: follow Grok theme, optional codex calm swap, then colors.* overrides.
+ */
 export function themeForHudConfig(
   cfg: HudDisplayConfig,
   grokHome?: string,
 ): HudTheme {
   const followed = resolveTheme(undefined, process.env, { grokHome });
-  if (cfg.aesthetic === "codex" && !isLightTheme(followed)) {
-    return THEME_CODEX;
+  let base = followed;
+  if (cfg.aesthetic === "codex") {
+    base = isLightTheme(followed) ? THEME_CODEX_LIGHT : THEME_CODEX;
   }
-  return followed;
+  return applyColorOverrides(base, cfg.colors as Partial<Record<keyof HudTheme, string>>);
 }
 
 /** Plain multi-line status block (for files / /hud / hooks). */
@@ -222,11 +230,11 @@ export function formatTmuxStatusLines(
   }
   if (d.showLive) {
     const t = session.live ? "●" : "○";
+    const calm =
+      cfg.aesthetic === "codex" || cfg.aesthetic === "dense";
     l0.push({
       text: t,
-      render: session.live
-        ? tmuxRole(theme, "live", t)
-        : tmuxRole(theme, "muted", t),
+      render: tmuxLiveMark(theme, session.live, { calm }),
       priority: 1,
     });
   }
@@ -254,22 +262,30 @@ export function formatTmuxStatusLines(
   const l1: FitSegment[] = [];
 
   {
+    const chars = barChars(cfg.barStyle);
     const bar = d.showContextBar
-      ? miniBar(pct, barW, theme, { bold: true }) + " "
+      ? miniBar(pct, barW, theme, {
+          bold: true,
+          filledChar: chars.filled,
+          emptyChar: chars.empty,
+          warningThreshold: cfg.warningThreshold,
+          criticalThreshold: cfg.criticalThreshold,
+        }) + " "
       : "";
     const val =
       tier === "xs" || tier === "sm"
         ? `${pct}%`
         : contextValueText(session, d.contextValue);
     const plain = `${L.ctx} ${val}`;
+    const role = severityRole(
+      pct,
+      cfg.warningThreshold,
+      cfg.criticalThreshold,
+    );
     const render =
       tmuxRole(theme, "label", `${L.ctx} `) +
       bar +
-      tmuxRole(
-        theme,
-        pct >= 90 ? "crit" : pct >= 70 ? "warn" : "ok",
-        val,
-      );
+      tmuxRole(theme, role, val);
     l1.push({ text: plain, render, priority: 0 });
   }
 
@@ -283,9 +299,24 @@ export function formatTmuxStatusLines(
   }
 
   if (d.showUsage && usage?.available && usage.percent != null) {
-    const q = Math.round(usage.percent);
+    // Same severity ladder as context (display value may be remaining %)
+    const usedPct = usage.percent;
+    const displayPct =
+      d.usageValue === "remaining"
+        ? Math.max(0, 100 - usedPct)
+        : usedPct;
+    const q = Math.round(displayPct);
+    // Color by *pressure* (used %), not remaining — high used → warn/crit
+    const pressure = usedPct;
+    const chars = barChars(cfg.barStyle);
     const bar = d.showContextBar
-      ? miniBar(q, Math.max(6, barW - 2), theme, { bold: true }) + " "
+      ? miniBar(pressure, Math.max(6, barW - 2), theme, {
+          bold: true,
+          filledChar: chars.filled,
+          emptyChar: chars.empty,
+          warningThreshold: cfg.warningThreshold,
+          criticalThreshold: cfg.criticalThreshold,
+        }) + " "
       : "";
     const periodWord =
       usage.period === "weekly"
@@ -298,10 +329,15 @@ export function formatTmuxStatusLines(
         ? ` ${periodWord} ${usage.resetsIn}`.trim()
         : "";
     const plain = `${L.use} ${q}%${tail ? " " + tail : ""}`;
+    const role = severityRole(
+      pressure,
+      cfg.warningThreshold,
+      cfg.criticalThreshold,
+    );
     const render =
       tmuxRole(theme, "label", `${L.use} `) +
       bar +
-      tmuxRole(theme, "primary", `${q}%`) +
+      tmuxRole(theme, role, `${q}%`) +
       (tail ? tmuxRole(theme, "muted", ` ${tail}`) : "");
     l1.push({ text: plain, render, priority: 2 });
   }

@@ -73,12 +73,12 @@ Codex App 像 **「安静的仪表」**：少色、轻分隔、状态才上色�
 - [x] GrokBuild 挂在 usage 行尾（不另占 meta 芯片）
 - [x] essential 预设对齐 compact middot + short tokens
 
-### Wave D2 — 语义色与动效克制（0.4.4）
+### Wave D2 — 语义色与动效克制（0.4.4）✅
 
-- [ ] 统一 severity：`<warn` green / `warn–crit` amber / `≥crit` red（窗与额同一套）
-- [ ] live 点：静· accent；stale 更灰；禁止闪烁
-- [ ] 浅色主题（grokday）对照 Codex light：纸色底 + 深墨数字（已有基础，校准对比度）
-- [ ] `colors.*` 用户覆盖（hex）写入 theme resolve
+- [x] 统一 severity：`<warn` green / `warn–crit` amber / `≥crit` red（窗与额同一套）
+- [x] live 点：静· accent；stale 更灰；禁止闪烁
+- [x] THEME_CODEX_LIGHT（浅色 codex）纸色底 + 深墨数字
+- [x] `colors.*` 用户覆盖（hex）合并进 palette
 
 ### Wave D3 — 窄窗与芯片布局（0.5.0）
 

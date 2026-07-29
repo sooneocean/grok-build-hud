@@ -7,13 +7,20 @@ import { fileURLToPath } from "node:url";
 import { formatTmuxStatusLine } from "../src/status.js";
 import { loadSnapshotFromDir } from "../src/session.js";
 import {
+  applyColorOverrides,
   miniBar,
+  severityColor,
+  severityLevel,
   THEME_TOKYONIGHT,
   THEME_GROKDAY,
+  THEME_CODEX,
+  THEME_CODEX_LIGHT,
   paletteForGrokTheme,
   readGrokUiConfig,
   resolveTheme,
   normalizeGrokThemeName,
+  tmuxLiveMark,
+  isLightTheme,
 } from "../src/theme.js";
 
 const pkgRoot = path.join(
@@ -118,5 +125,37 @@ describe("theme", () => {
     assert.doesNotMatch(sep, /dim/);
     assert.match(label, /italics|bold/);
     assert.match(label, /#57534e|#0c0a09|#5b21b6|fg=/);
+  });
+
+  it("severity ladder is shared for context and usage", () => {
+    assert.equal(severityLevel(10), "ok");
+    assert.equal(severityLevel(70), "warn");
+    assert.equal(severityLevel(90), "crit");
+    assert.equal(severityLevel(80, 75, 95), "warn");
+    assert.equal(severityColor(50, THEME_CODEX), THEME_CODEX.ok);
+    assert.equal(severityColor(75, THEME_CODEX), THEME_CODEX.warn);
+    assert.equal(severityColor(95, THEME_CODEX), THEME_CODEX.crit);
+  });
+
+  it("applyColorOverrides merges hex colors", () => {
+    const t = applyColorOverrides(THEME_CODEX, { ok: "#00ff00", mark: "#111111" });
+    assert.equal(t.ok, "#00ff00");
+    assert.equal(t.mark, "#111111");
+    assert.equal(t.warn, THEME_CODEX.warn);
+  });
+
+  it("live mark is calm (no blink attrs) and stale is muted", () => {
+    const live = tmuxLiveMark(THEME_CODEX, true, { calm: true });
+    const stale = tmuxLiveMark(THEME_CODEX, false, { calm: true });
+    assert.match(live, /●/);
+    assert.match(stale, /○/);
+    assert.doesNotMatch(live, /blink|underscore/);
+    assert.match(stale, /#52525b|fg=/);
+  });
+
+  it("codex-light is a light paper palette", () => {
+    assert.equal(isLightTheme(THEME_CODEX_LIGHT), true);
+    assert.match(THEME_CODEX_LIGHT.statusBg, /^#f/);
+    assert.match(THEME_CODEX_LIGHT.value, /^#0/);
   });
 });

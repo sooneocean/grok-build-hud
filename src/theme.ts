@@ -175,6 +175,23 @@ export const THEME_CODEX: HudTheme = {
   stale: "#52525b",
 };
 
+/** Codex calm light — paper strip, deep ink, emerald accent only for live/ok. */
+export const THEME_CODEX_LIGHT: HudTheme = {
+  name: "codex-light",
+  statusBg: "#f4f4f5",
+  statusFg: "#18181b",
+  label: "#52525b",
+  value: "#09090b",
+  sep: "#a1a1aa",
+  mark: "#059669",
+  ok: "#15803d",
+  warn: "#b45309",
+  crit: "#b91c1c",
+  barEmpty: "#d4d4d8",
+  live: "#059669",
+  stale: "#71717a",
+};
+
 export const THEME_DEFAULT: HudTheme = THEME_TOKYONIGHT;
 
 const GROK_THEME_ALIASES: Record<string, string> = {
@@ -199,6 +216,8 @@ const GROK_THEME_ALIASES: Record<string, string> = {
   oscura: "oscuramidnight",
   codex: "codex",
   "codex-calm": "codex",
+  "codex-light": "codex-light",
+  codexlight: "codex-light",
   auto: "auto",
   system: "auto",
 };
@@ -223,6 +242,8 @@ export function paletteForGrokTheme(rawName: string): HudTheme {
       return THEME_OSCURA;
     case "codex":
       return THEME_CODEX;
+    case "codex-light":
+      return THEME_CODEX_LIGHT;
     case "light":
       return THEME_CLEAR_LIGHT;
     case "dark":
@@ -521,28 +542,87 @@ export function persistTheme(name: string): string {
   return p;
 }
 
-export function severityColor(percent: number, theme: HudTheme): string {
-  if (percent >= 90) return theme.crit;
-  if (percent >= 70) return theme.warn;
+export type SeverityLevel = "ok" | "warn" | "crit";
+
+/**
+ * Unified severity for context % and usage % (same ladder).
+ * Defaults match classic 70 / 90; callers should pass config thresholds.
+ */
+export function severityLevel(
+  percent: number,
+  warningThreshold = 70,
+  criticalThreshold = 90,
+): SeverityLevel {
+  const p = Math.max(0, Math.min(100, percent));
+  if (p >= criticalThreshold) return "crit";
+  if (p >= warningThreshold) return "warn";
+  return "ok";
+}
+
+export function severityColor(
+  percent: number,
+  theme: HudTheme,
+  warningThreshold = 70,
+  criticalThreshold = 90,
+): string {
+  const level = severityLevel(percent, warningThreshold, criticalThreshold);
+  if (level === "crit") return theme.crit;
+  if (level === "warn") return theme.warn;
   return theme.ok;
 }
 
+export function severityRole(
+  percent: number,
+  warningThreshold = 70,
+  criticalThreshold = 90,
+): "ok" | "warn" | "crit" {
+  return severityLevel(percent, warningThreshold, criticalThreshold);
+}
+
+/** Merge user colors.* overrides onto a palette (hex / named strings). */
+export function applyColorOverrides(
+  theme: HudTheme,
+  colors?: Partial<Record<keyof HudTheme, string>> | null,
+): HudTheme {
+  if (!colors || typeof colors !== "object") return theme;
+  const next = { ...theme };
+  for (const key of Object.keys(colors) as (keyof HudTheme)[]) {
+    const v = colors[key];
+    if (typeof v === "string" && v.trim()) {
+      (next as Record<string, string>)[key] = v.trim();
+    }
+  }
+  return next;
+}
+
 /**
- * Progress bar — heavy block glyphs for readability on Terminal.app.
- * filled: █ (solid), empty: ░ (light track)
+ * Progress bar — glyphs depend on barStyle (block/thin/dot).
  */
 export function miniBar(
   percent: number,
   width = 12,
   theme: HudTheme = THEME_DEFAULT,
-  options: { bold?: boolean } = {},
+  options: {
+    bold?: boolean;
+    filledChar?: string;
+    emptyChar?: string;
+    warningThreshold?: number;
+    criticalThreshold?: number;
+  } = {},
 ): string {
   const p = Math.max(0, Math.min(100, percent));
   const filled = Math.round((p / 100) * width);
   const empty = Math.max(0, width - filled);
-  const fg = severityColor(p, theme);
+  const fg = severityColor(
+    p,
+    theme,
+    options.warningThreshold ?? 70,
+    options.criticalThreshold ?? 90,
+  );
   const bold = options.bold !== false ? "bold," : "";
-  return `#[${bold}fg=${fg}]${"█".repeat(filled)}#[fg=${theme.barEmpty}]${"░".repeat(empty)}#[default]`;
+  const f = options.filledChar ?? "█";
+  const e = options.emptyChar ?? "░";
+  return `#[${bold}fg=${fg}]${f.repeat(filled)}#[fg=${theme.barEmpty}]${e.repeat(empty)}#[default]`;
 }
 
 export interface TmuxStyleOpts {
@@ -573,7 +653,15 @@ export function tmuxFg(
 /** Light / paper palettes — dim attribute destroys contrast on light bg. */
 export function isLightTheme(theme: HudTheme): boolean {
   const n = (theme.name || "").toLowerCase();
-  if (n === "grokday" || n === "light" || n === "day") return true;
+  if (
+    n === "grokday" ||
+    n === "light" ||
+    n === "day" ||
+    n === "codex-light" ||
+    n === "codexlight"
+  ) {
+    return true;
+  }
   // Heuristic: explicit light status background hex
   const bg = (theme.statusBg || "").toLowerCase();
   if (bg.startsWith("#")) {
@@ -637,13 +725,33 @@ export function tmuxRole(
     case "crit":
       return tmuxFg(theme.crit, text, { bold: true });
     case "live":
-      return tmuxFg(theme.live, text, { bold: true });
+      // Calm pulse: accent ink, bold only on dark (paper already high contrast)
+      return tmuxFg(theme.live, text, { bold: !light });
     case "sep":
       // Never dim seps on light — they vanish on white
       return tmuxFg(theme.sep, text, { dim: !light });
     default:
       return tmuxFg(theme.value, text, { bold: true });
   }
+}
+
+/** Quiet live/stale markers (no blink; codex aesthetic prefers stillness). */
+export function tmuxLiveMark(
+  theme: HudTheme,
+  live: boolean,
+  options: { calm?: boolean } = {},
+): string {
+  const mark = live ? "●" : "○";
+  if (!live) {
+    return tmuxFg(theme.stale, mark, {
+      dim: !isLightTheme(theme),
+      italics: true,
+    });
+  }
+  // calm: solid accent without extra flash attributes
+  return tmuxFg(theme.live, mark, {
+    bold: !options.calm && !isLightTheme(theme),
+  });
 }
 
 export function tmuxStatusChrome(theme: HudTheme = THEME_DEFAULT): {

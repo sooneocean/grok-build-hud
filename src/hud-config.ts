@@ -77,6 +77,24 @@ export interface HudDisplayConfig {
    * 0 = always show when showTokenBreakdown. Default 0 for classic, 70 for codex.
    */
   tokenRevealAtContextPercent?: number;
+  /**
+   * Optional palette overrides (hex or named). Merged onto resolved theme.
+   * Keys: ok, warn, crit, label, value, sep, mark, live, stale, barEmpty, statusBg, statusFg
+   */
+  colors?: Partial<{
+    ok: string;
+    warn: string;
+    crit: string;
+    label: string;
+    value: string;
+    sep: string;
+    mark: string;
+    live: string;
+    stale: string;
+    barEmpty: string;
+    statusBg: string;
+    statusFg: string;
+  }>;
   display: {
     showModel: boolean;
     showProject: boolean;
@@ -354,6 +372,18 @@ export function loadHudConfig(
         typeof raw.tokenRevealAtContextPercent === "number"
           ? raw.tokenRevealAtContextPercent
           : (base.tokenRevealAtContextPercent ?? 0),
+      colors: {
+        ...(base.colors ?? {}),
+        ...((raw.colors as HudDisplayConfig["colors"]) ?? {}),
+      },
+      warningThreshold:
+        typeof raw.warningThreshold === "number"
+          ? raw.warningThreshold
+          : (base.warningThreshold ?? 70),
+      criticalThreshold:
+        typeof raw.criticalThreshold === "number"
+          ? raw.criticalThreshold
+          : (base.criticalThreshold ?? 90),
       display: {
         ...base.display,
         ...(raw.display ?? {}),

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.4
+
+### Design aesthetics (Wave D2 — semantic color & calm live)
+- **Unified severity ladder** for context *and* usage bars/percents:
+  `ok < warningThreshold ≤ warn < criticalThreshold ≤ crit` (default 70/90).
+- **Usage %** uses the same severity colors as context (by *used* pressure).
+- **`colors.*` overrides** in `config.json` (hex) merge onto the active palette.
+- **THEME_CODEX_LIGHT** for light Grok themes under `aesthetic: codex`.
+- **Calm live mark**: solid accent ● / muted ○ — no blink; softer on paper.
+- **miniBar** respects `barStyle` glyphs + configurable thresholds.
+
 ## 0.4.3
 
 ### Design aesthetics (Wave D1 — main-sight calm)
