@@ -1,7 +1,6 @@
 /**
- * Single plain-text HUD composer (Phase A).
- * All adapters (status.txt, CLI --once, future elementOrder) start here.
- * tmux coloring stays in status.ts — it wraps the same semantic fields.
+ * Single plain-text HUD composer.
+ * Phase B: elementOrder + mergeGroups + label-align + remaining modes.
  */
 import {
   formatDuration,
@@ -11,10 +10,15 @@ import {
 } from "../bar.js";
 import { formatToolLine } from "../activity.js";
 import {
+  DEFAULT_ELEMENT_ORDER,
+  DEFAULT_MERGE_GROUPS,
+  DEFAULT_PROJECT_LINE_ORDER,
   loadHudConfig,
+  type FirstLineSegment,
   type HudDisplayConfig,
+  type HudElement,
 } from "../hud-config.js";
-import { stringsFromConfig } from "../i18n.js";
+import { stringsFromConfig, type HudStrings } from "../i18n.js";
 import { formatTokenBreakdownLine } from "../token-usage.js";
 import type {
   SessionSnapshot,
@@ -22,6 +26,7 @@ import type {
   TokenBreakdown,
   UsageSnapshot,
 } from "../types.js";
+import { alignedLabel } from "./label-align.js";
 import { truncateVisible } from "./width.js";
 
 export function displayModel(model: string): string {
@@ -34,13 +39,36 @@ export function contextValueText(
   mode: HudDisplayConfig["display"]["contextValue"],
 ): string {
   const pct = Math.round(session.contextPercent);
+  const remaining = Math.max(0, 100 - pct);
   const tokens =
     session.contextWindowTokens > 0
       ? `${formatTokenCount(session.contextTokensUsed)}/${formatTokenCount(session.contextWindowTokens)}`
       : "";
+  const remainTok =
+    session.contextWindowTokens > 0
+      ? formatTokenCount(
+          Math.max(0, session.contextWindowTokens - session.contextTokensUsed),
+        )
+      : "";
   if (mode === "tokens") return tokens || `${pct}%`;
+  if (mode === "remaining") {
+    if (remainTok) return `${remaining}% (${remainTok} left)`;
+    return `${remaining}% left`;
+  }
   if (mode === "both") return tokens ? `${pct}% (${tokens})` : `${pct}%`;
   return `${pct}%`;
+}
+
+function usageValueText(
+  usage: UsageSnapshot,
+  mode: HudDisplayConfig["display"]["usageValue"],
+): string {
+  const used = usage.percent ?? 0;
+  if (mode === "remaining") {
+    const rem = Math.max(0, Math.round(100 - used));
+    return `${rem}%`;
+  }
+  return `${Math.round(used)}%`;
 }
 
 function formatTodosLine(todos: TodoItem[]): string {
@@ -55,14 +83,27 @@ function formatTodosLine(todos: TodoItem[]): string {
   return `▸ ${label} (${done}/${todos.length})`;
 }
 
+/** Agents: show up to 2 recent subagents with type/detail/status. */
 function formatAgentsLine(session: SessionSnapshot): string {
   if (!session.agents?.length) return "";
-  const a = session.agents[session.agents.length - 1]!;
-  const title = a.title ?? "agent";
-  const detail = a.detail ? `: ${truncateVisible(a.detail, 36)}` : "";
-  const status =
-    a.status && a.status !== "active" ? ` [${a.status}]` : "";
-  return `◐ ${title}${status}${detail}`;
+  const recent = session.agents.slice(-2);
+  const parts = recent.map((a) => {
+    const title = a.title ?? "agent";
+    const typeBit =
+      a.detail && a.detail !== title
+        ? `[${truncateVisible(a.detail, 16)}]`
+        : "";
+    const status =
+      a.status && a.status !== "active" ? ` ${a.status}` : "";
+    const icon =
+      a.status === "completed" || a.status === "success"
+        ? "✓"
+        : a.status === "cancelled" || a.status === "failed"
+          ? "✗"
+          : "◐";
+    return `${icon} ${title}${typeBit ? ` ${typeBit}` : ""}${status}`;
+  });
+  return parts.join(" | ");
 }
 
 function pickTokenForDisplay(
@@ -119,63 +160,133 @@ function tokenLinesForHud(
   return out;
 }
 
-/**
- * Compose semantic HUD lines (no ANSI, no tmux codes).
- * Default expanded: identity · metrics · activity.
- */
-export function composeHudLines(
+function resolveOrder(cfg: HudDisplayConfig): HudElement[] {
+  return cfg.elementOrder?.length
+    ? cfg.elementOrder
+    : [...DEFAULT_ELEMENT_ORDER];
+}
+
+function resolveMergeGroups(cfg: HudDisplayConfig): HudElement[][] {
+  // Empty array is intentional (no merging). Only fall back when unset.
+  if (cfg.mergeGroups !== undefined) return cfg.mergeGroups;
+  return DEFAULT_MERGE_GROUPS.map((g) => [...g]);
+}
+
+function resolveProjectOrder(cfg: HudDisplayConfig): FirstLineSegment[] {
+  // Explicit order wins fully (even if shorter than defaults).
+  if (cfg.projectLineOrder !== undefined && cfg.projectLineOrder.length > 0) {
+    return cfg.projectLineOrder;
+  }
+  return [...DEFAULT_PROJECT_LINE_ORDER];
+}
+
+function groupIdOf(
+  el: HudElement,
+  groups: HudElement[][],
+): number {
+  for (let i = 0; i < groups.length; i++) {
+    if (groups[i]!.includes(el)) return i;
+  }
+  return -1;
+}
+
+function buildProjectLine(
   session: SessionSnapshot,
-  usage?: UsageSnapshot | null,
-  cfg: HudDisplayConfig = loadHudConfig(),
-): string[] {
+  cfg: HudDisplayConfig,
+  L: HudStrings,
+): string {
   const d = cfg.display;
-  const L = stringsFromConfig(cfg);
-  const lines: string[] = [];
+  const order = resolveProjectOrder(cfg);
+  const parts: string[] = [];
 
-  // Line 1 — model │ project git │ live  (+ optional title)
-  const l1: string[] = [];
-  if (d.showModel) l1.push(`[${displayModel(session.model)}]`);
-  if (d.showProject) {
-    let proj = projectLabel(session.cwd, cfg.pathLevels);
-    if (d.showGit && session.branch) {
-      const dirty = d.showGitDirty && session.gitDirty ? "*" : "";
-      let ab = "";
-      if (session.gitAhead) ab += `↑${session.gitAhead}`;
-      if (session.gitBehind) ab += `↓${session.gitBehind}`;
-      proj += ` git:(${session.branch}${dirty}${ab})`;
+  const emit = (seg: FirstLineSegment): string | null => {
+    switch (seg) {
+      case "model":
+        return d.showModel ? `[${displayModel(session.model)}]` : null;
+      case "project": {
+        if (!d.showProject) return null;
+        let proj = projectLabel(session.cwd, cfg.pathLevels);
+        if (d.showGit && session.branch) {
+          const dirty = d.showGitDirty && session.gitDirty ? "*" : "";
+          let ab = "";
+          if (session.gitAhead) ab += `↑${session.gitAhead}`;
+          if (session.gitBehind) ab += `↓${session.gitBehind}`;
+          proj += ` git:(${session.branch}${dirty}${ab})`;
+        }
+        return proj;
+      }
+      case "live":
+        if (!d.showLive) return null;
+        return session.live ? `● ${L.live}` : `○ ${L.stale}`;
+      case "title":
+        return d.showTitle && session.title
+          ? truncateVisible(session.title, 36)
+          : null;
+      case "effort":
+        return session.reasoningEffort
+          ? `effort:${session.reasoningEffort}`
+          : null;
+      default:
+        return null;
     }
-    l1.push(proj);
-  }
-  if (d.showLive) {
-    l1.push(session.live ? `● ${L.live}` : `○ ${L.stale}`);
-  }
-  if (d.showTitle && session.title) {
-    l1.push(truncateVisible(session.title, 36));
-  }
-  if (session.reasoningEffort) {
-    l1.push(`effort:${session.reasoningEffort}`);
-  }
-  if (l1.length) lines.push(l1.join(" │ "));
+  };
 
-  // Line 2 — context + usage + meta
+  for (const seg of order) {
+    const t = emit(seg);
+    if (t) parts.push(t);
+  }
+  return parts.join(" │ ");
+}
+
+/** Context fragment with optional label pad (space after label preserved). */
+function fragContext(
+  session: SessionSnapshot,
+  cfg: HudDisplayConfig,
+  L: HudStrings,
+): string {
+  const d = cfg.display;
+  const align = cfg.alignLabels !== false;
+  const label = alignedLabel(L.ctx, L, align);
   const cBar = d.showContextBar ? renderBar(session.contextPercent) + " " : "";
-  const ctxPart = `${L.ctx} ${cBar}${contextValueText(session, d.contextValue)}`;
+  return `${label} ${cBar}${contextValueText(session, d.contextValue)}`;
+}
 
-  let usagePart = "";
-  if (d.showUsage) {
-    if (usage?.available && usage.percent != null) {
-      const uBar = d.showContextBar ? renderBar(usage.percent) + " " : "";
-      const abs =
-        usage.used != null && usage.limit != null
-          ? ` ${formatTokenCount(usage.used)}/${formatTokenCount(usage.limit)}`
-          : "";
-      const reset = usage.resetsIn ? ` · ${usage.resetsIn} ${L.left}` : "";
-      usagePart = `${L.use} ${uBar}${Math.round(usage.percent)}%${usage.period ? ` (${usage.period})` : ""}${abs}${reset}`;
-    } else if (usage) {
-      usagePart = `${L.use} — ${usage.message ?? "n/a"}`;
-    }
+function fragUsage(
+  usage: UsageSnapshot | null | undefined,
+  cfg: HudDisplayConfig,
+  L: HudStrings,
+): string {
+  const d = cfg.display;
+  if (!d.showUsage || !usage) return "";
+  const align = cfg.alignLabels !== false;
+  const label = alignedLabel(L.use, L, align);
+  if (usage.available && usage.percent != null) {
+    const displayPct =
+      d.usageValue === "remaining"
+        ? Math.max(0, 100 - usage.percent)
+        : usage.percent;
+    const uBar = d.showContextBar ? renderBar(displayPct) + " " : "";
+    const abs =
+      usage.used != null && usage.limit != null
+        ? ` ${formatTokenCount(usage.used)}/${formatTokenCount(usage.limit)}`
+        : "";
+    const reset = usage.resetsIn ? ` · ${usage.resetsIn} ${L.left}` : "";
+    const val = usageValueText(usage, d.usageValue ?? "percent");
+    // remaining mode: bar + "24% left"; percent mode: bar + "76%"
+    const valBit =
+      d.usageValue === "remaining" ? `${val} ${L.left}` : val;
+    return `${label} ${uBar}${valBit}${usage.period ? ` (${usage.period})` : ""}${abs}${reset}`;
   }
+  return `${label} — ${usage.message ?? "n/a"}`;
+}
 
+function fragMeta(
+  session: SessionSnapshot,
+  usage: UsageSnapshot | null | undefined,
+  cfg: HudDisplayConfig,
+  L: HudStrings,
+): string {
+  const d = cfg.display;
   const meta: string[] = [];
   if (d.showSessionTime && session.durationSeconds > 0) {
     meta.push(formatDuration(session.durationSeconds));
@@ -202,34 +313,139 @@ export function composeHudLines(
       .find((s) => /GrokBuild/i.test(s));
     if (gb) meta.push(gb);
   }
+  return meta.join(" │ ");
+}
 
-  const tokParts = tokenLinesForHud(session, cfg);
-  const line2 = [ctxPart, tokParts[0], usagePart, ...meta]
-    .filter(Boolean)
-    .join(" │ ");
-  if (line2) lines.push(line2);
-  if (tokParts[1]) lines.push(tokParts[1]);
+function fragTokens(session: SessionSnapshot, cfg: HudDisplayConfig): string {
+  const parts = tokenLinesForHud(session, cfg);
+  return parts[0] ?? "";
+}
 
-  // Activity
-  const activity: string[] = [];
-  if (d.showToolActivity) {
-    const tl = formatToolLine(session.tools);
-    if (tl) activity.push(tl);
+function fragTokensExtra(
+  session: SessionSnapshot,
+  cfg: HudDisplayConfig,
+): string {
+  const parts = tokenLinesForHud(session, cfg);
+  return parts[1] ?? "";
+}
+
+/**
+ * Build per-element plain fragments (empty string = skip).
+ * `project` is special: becomes its own identity line when present.
+ */
+function elementFragment(
+  el: HudElement,
+  session: SessionSnapshot,
+  usage: UsageSnapshot | null | undefined,
+  cfg: HudDisplayConfig,
+  L: HudStrings,
+): string {
+  const d = cfg.display;
+  switch (el) {
+    case "project":
+      return buildProjectLine(session, cfg, L);
+    case "context":
+      return fragContext(session, cfg, L);
+    case "usage":
+      return fragUsage(usage, cfg, L);
+    case "tokens":
+      return fragTokens(session, cfg);
+    case "meta":
+      return fragMeta(session, usage, cfg, L);
+    case "tools":
+      return d.showToolActivity ? formatToolLine(session.tools) : "";
+    case "agents":
+      return d.showAgents ? formatAgentsLine(session) : "";
+    case "todos":
+      return d.showTodos ? formatTodosLine(session.todos) : "";
+    default:
+      return "";
   }
-  if (d.showAgents) {
-    const al = formatAgentsLine(session);
-    if (al) activity.push(al);
+}
+
+/**
+ * Compose semantic HUD lines (no ANSI, no tmux codes).
+ * Uses elementOrder + mergeGroups (Claude-HUD-style).
+ */
+export function composeHudLines(
+  session: SessionSnapshot,
+  usage?: UsageSnapshot | null,
+  cfg: HudDisplayConfig = loadHudConfig(),
+): string[] {
+  const L = stringsFromConfig(cfg);
+  const order = resolveOrder(cfg);
+  const groups = resolveMergeGroups(cfg);
+  const lines: string[] = [];
+
+  let i = 0;
+  while (i < order.length) {
+    const el = order[i]!;
+    const frag = elementFragment(el, session, usage, cfg, L);
+    if (!frag) {
+      i += 1;
+      continue;
+    }
+
+    // project is always its own line (identity)
+    if (el === "project") {
+      lines.push(frag);
+      i += 1;
+      continue;
+    }
+
+    const gid = groupIdOf(el, groups);
+    if (gid < 0) {
+      // activity elements that share tools/agents/todos: merge consecutive
+      // activity-like into one line when adjacent
+      if (el === "tools" || el === "agents" || el === "todos") {
+        const bits: string[] = [frag];
+        let j = i + 1;
+        while (j < order.length) {
+          const next = order[j]!;
+          if (next !== "tools" && next !== "agents" && next !== "todos") break;
+          const nf = elementFragment(next, session, usage, cfg, L);
+          if (nf) bits.push(nf);
+          j += 1;
+        }
+        lines.push(bits.join("  ·  "));
+        i = j;
+        continue;
+      }
+      lines.push(frag);
+      i += 1;
+      continue;
+    }
+
+    // Merge consecutive elements that share the same merge group
+    const bits: string[] = [frag];
+    let j = i + 1;
+    while (j < order.length) {
+      const next = order[j]!;
+      if (groupIdOf(next, groups) !== gid) break;
+      const nf = elementFragment(next, session, usage, cfg, L);
+      if (nf) bits.push(nf);
+      j += 1;
+    }
+    lines.push(bits.join(" │ "));
+    i = j;
   }
-  if (d.showTodos) {
-    const td = formatTodosLine(session.todos);
-    if (td) activity.push(td);
+
+  // ΣTOK extra row when present
+  const extra = fragTokensExtra(session, cfg);
+  if (extra) {
+    // insert after metrics (after first non-project line) or append
+    const insertAt = lines.length > 0 && order.includes("project") ? 2 : 1;
+    if (insertAt <= lines.length) {
+      lines.splice(insertAt, 0, extra);
+    } else {
+      lines.push(extra);
+    }
   }
-  if (activity.length) lines.push(activity.join("  ·  "));
 
   if (cfg.lineLayout === "compact") {
     return [lines.slice(0, 2).join(" · ")].filter(Boolean);
   }
-  return lines;
+  return lines.filter(Boolean);
 }
 
 /** Join compose lines into a single multi-line string. */
@@ -239,4 +455,13 @@ export function composeHudText(
   cfg: HudDisplayConfig = loadHudConfig(),
 ): string {
   return composeHudLines(session, usage, cfg).join("\n");
+}
+
+/** Preview helper for settings UI. */
+export function previewHud(
+  session: SessionSnapshot,
+  usage: UsageSnapshot | null | undefined,
+  cfg: HudDisplayConfig,
+): string {
+  return composeHudText(session, usage, cfg);
 }

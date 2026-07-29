@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.1
+
+### Features (Phase B — Claude-style info architecture)
+- **elementOrder**: configure which body blocks appear and in which order
+  (`project`, `context`, `usage`, `tokens`, `meta`, `tools`, `agents`, `todos`).
+- **mergeGroups**: adjacent elements in the same group share a line (default
+  context+usage+tokens+meta). Set `mergeGroups: []` to put context and usage
+  on separate lines.
+- **projectLineOrder**: reorder first-line segments (`model`, `project`,
+  `live`, `title`, `effort`); explicit order is respected fully.
+- **alignLabels**: pad 窗/额 (ctx/use) to the same visual width before bars.
+- **contextValue: remaining** and **usageValue: remaining** display free % of
+  the window / quota.
+- **Settings preview** (`grok-hud settings` → `8`): sample strip with current
+  options; toggles for align labels (`6`) and usage remaining (`7`).
+- **Agents line**: show up to 2 subagents with type detail (`scout`) and status.
+
+### Docs
+- Config keys documented in CHANGELOG; full README table follows in 0.5.
+
 ## 0.4.0
 
 ### Architecture (Phase A)

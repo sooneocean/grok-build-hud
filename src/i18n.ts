@@ -51,6 +51,10 @@ export interface HudStrings {
   back: string;
   languageSet: string;
   helpSettings: string;
+  preview: string;
+  previewHint: string;
+  alignLabels: string;
+  usageRemaining: string;
 }
 
 const ZH_HANS: HudStrings = {
@@ -96,6 +100,10 @@ const ZH_HANS: HudStrings = {
   back: "返回",
   languageSet: "语言已设为",
   helpSettings: "打开设定界面（语言 / 预设 / 行数）",
+  preview: "预览状态条",
+  previewHint: "按当前设定渲染示例",
+  alignLabels: "标签对齐 (窗/额)",
+  usageRemaining: "额度显示剩余%",
 };
 
 const ZH_HANT: HudStrings = {
@@ -141,6 +149,10 @@ const ZH_HANT: HudStrings = {
   back: "返回",
   languageSet: "語言已設為",
   helpSettings: "開啟設定介面（語言 / 預設 / 行數）",
+  preview: "預覽狀態條",
+  previewHint: "依目前設定渲染範例",
+  alignLabels: "標籤對齊 (窗/額)",
+  usageRemaining: "額度顯示剩餘%",
 };
 
 const EN: HudStrings = {
@@ -186,6 +198,10 @@ const EN: HudStrings = {
   back: "Back",
   languageSet: "Language set to",
   helpSettings: "Open settings UI (language / preset / rows)",
+  preview: "Preview strip",
+  previewHint: "Render sample with current settings",
+  alignLabels: "Align labels (ctx/use)",
+  usageRemaining: "Usage as remaining %",
 };
 
 export function normalizeLang(raw?: string | null): HudLang {

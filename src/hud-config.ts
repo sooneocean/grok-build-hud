@@ -9,6 +9,28 @@ import os from "node:os";
 export type HudPreset = "full" | "essential" | "minimal";
 export type LineLayout = "expanded" | "compact";
 
+/** Orderable body elements (Claude-HUD style). */
+export type HudElement =
+  | "project"
+  | "context"
+  | "usage"
+  | "tokens"
+  | "meta"
+  | "tools"
+  | "agents"
+  | "todos";
+
+/** First-line segments (identity row). */
+export type FirstLineSegment =
+  | "model"
+  | "project"
+  | "live"
+  | "title"
+  | "effort";
+
+export type ContextValueMode = "percent" | "tokens" | "remaining" | "both";
+export type UsageValueMode = "percent" | "remaining";
+
 export interface HudDisplayConfig {
   preset: HudPreset;
   lineLayout: LineLayout;
@@ -20,15 +42,31 @@ export interface HudDisplayConfig {
   bold: boolean;
   /** Context/usage bar width in cells (default 12). */
   barWidth: number;
+  /**
+   * Expanded-mode element order. Omitted elements are hidden even if show* is true
+   * when elementOrder is explicitly set; default order uses show* flags only.
+   */
+  elementOrder?: HudElement[];
+  /**
+   * Groups of elements that share one line when adjacent in elementOrder.
+   * Default: context + usage (+ tokens + meta) on one metrics line.
+   */
+  mergeGroups?: HudElement[][];
+  /** Optional reorder of first-line segments; visibility still from display.show*. */
+  projectLineOrder?: FirstLineSegment[];
+  /** Pad 窗/额 labels to the same visual width before bars. */
+  alignLabels?: boolean;
   display: {
     showModel: boolean;
     showProject: boolean;
     showGit: boolean;
     showGitDirty: boolean;
     showContextBar: boolean;
-    /** percent | tokens | both */
-    contextValue: "percent" | "tokens" | "both";
+    /** percent | tokens | remaining | both */
+    contextValue: ContextValueMode;
     showUsage: boolean;
+    /** percent | remaining — remaining = 100 - used% */
+    usageValue: UsageValueMode;
     showProductBreakdown: boolean;
     showSessionTime: boolean;
     showTurns: boolean;
@@ -54,6 +92,29 @@ export interface HudDisplayConfig {
   criticalThreshold: number;
 }
 
+export const DEFAULT_ELEMENT_ORDER: HudElement[] = [
+  "project",
+  "context",
+  "usage",
+  "tokens",
+  "meta",
+  "tools",
+  "agents",
+  "todos",
+];
+
+export const DEFAULT_MERGE_GROUPS: HudElement[][] = [
+  ["context", "usage", "tokens", "meta"],
+];
+
+export const DEFAULT_PROJECT_LINE_ORDER: FirstLineSegment[] = [
+  "model",
+  "project",
+  "live",
+  "title",
+  "effort",
+];
+
 export const PRESET_FULL: HudDisplayConfig = {
   preset: "full",
   lineLayout: "expanded",
@@ -63,6 +124,10 @@ export const PRESET_FULL: HudDisplayConfig = {
   statusLines: 3,
   bold: true,
   barWidth: 14,
+  elementOrder: [...DEFAULT_ELEMENT_ORDER],
+  mergeGroups: DEFAULT_MERGE_GROUPS.map((g) => [...g]),
+  projectLineOrder: [...DEFAULT_PROJECT_LINE_ORDER],
+  alignLabels: true,
   display: {
     showModel: true,
     showProject: true,
@@ -71,6 +136,7 @@ export const PRESET_FULL: HudDisplayConfig = {
     showContextBar: true,
     contextValue: "both",
     showUsage: true,
+    usageValue: "percent",
     showProductBreakdown: true,
     showSessionTime: true,
     showTurns: true,
@@ -96,6 +162,14 @@ export const PRESET_ESSENTIAL: HudDisplayConfig = {
   statusLines: 2,
   bold: true,
   barWidth: 14,
+  elementOrder: [
+    "project",
+    "context",
+    "usage",
+    "tools",
+    "agents",
+    "todos",
+  ],
   display: {
     ...PRESET_FULL.display,
     showProductBreakdown: false,
@@ -104,9 +178,13 @@ export const PRESET_ESSENTIAL: HudDisplayConfig = {
     showDiffStats: false,
     showTitle: false,
     contextValue: "percent",
+    usageValue: "percent",
     showTokenBreakdown: true,
     tokenScope: "last",
     tokenDigits: "exact",
+    showSessionTime: false,
+    showTurns: false,
+    showTools: false,
   },
 };
 
@@ -117,6 +195,9 @@ export const PRESET_MINIMAL: HudDisplayConfig = {
   statusLines: 1,
   bold: true,
   barWidth: 14,
+  elementOrder: ["project", "context", "usage"],
+  mergeGroups: [["context", "usage"]],
+  alignLabels: false,
   display: {
     ...PRESET_FULL.display,
     showGit: true,
@@ -132,11 +213,57 @@ export const PRESET_MINIMAL: HudDisplayConfig = {
     showDiffStats: false,
     showTitle: false,
     contextValue: "percent",
+    usageValue: "percent",
     showTokenBreakdown: true,
     tokenScope: "last",
     tokenDigits: "short",
   },
 };
+
+const VALID_ELEMENTS = new Set<string>(DEFAULT_ELEMENT_ORDER);
+const VALID_SEGMENTS = new Set<string>(DEFAULT_PROJECT_LINE_ORDER);
+
+function sanitizeElementOrder(raw: unknown): HudElement[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: HudElement[] = [];
+  for (const x of raw) {
+    if (typeof x === "string" && VALID_ELEMENTS.has(x) && !out.includes(x as HudElement)) {
+      out.push(x as HudElement);
+    }
+  }
+  return out.length ? out : undefined;
+}
+
+function sanitizeMergeGroups(raw: unknown): HudElement[][] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const groups: HudElement[][] = [];
+  for (const g of raw) {
+    if (!Array.isArray(g)) continue;
+    const row: HudElement[] = [];
+    for (const x of g) {
+      if (typeof x === "string" && VALID_ELEMENTS.has(x) && !row.includes(x as HudElement)) {
+        row.push(x as HudElement);
+      }
+    }
+    if (row.length) groups.push(row);
+  }
+  return groups;
+}
+
+function sanitizeProjectLineOrder(raw: unknown): FirstLineSegment[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: FirstLineSegment[] = [];
+  for (const x of raw) {
+    if (
+      typeof x === "string" &&
+      VALID_SEGMENTS.has(x) &&
+      !out.includes(x as FirstLineSegment)
+    ) {
+      out.push(x as FirstLineSegment);
+    }
+  }
+  return out.length ? out : undefined;
+}
 
 export function configPath(grokHome = path.join(os.homedir(), ".grok")): string {
   return path.join(grokHome, "hud", "config.json");
@@ -151,6 +278,9 @@ export function loadHudConfig(
       return {
         ...PRESET_FULL,
         language: "en",
+        elementOrder: [...DEFAULT_ELEMENT_ORDER],
+        mergeGroups: DEFAULT_MERGE_GROUPS.map((g) => [...g]),
+        projectLineOrder: [...DEFAULT_PROJECT_LINE_ORDER],
         display: { ...PRESET_FULL.display },
       };
     }
@@ -161,23 +291,60 @@ export function loadHudConfig(
         : raw.preset === "essential"
           ? PRESET_ESSENTIAL
           : PRESET_FULL;
+    const elementOrder =
+      sanitizeElementOrder(raw.elementOrder) ??
+      (base.elementOrder ? [...base.elementOrder] : [...DEFAULT_ELEMENT_ORDER]);
+    const mergeGroups =
+      sanitizeMergeGroups(raw.mergeGroups) ??
+      (base.mergeGroups
+        ? base.mergeGroups.map((g) => [...g])
+        : DEFAULT_MERGE_GROUPS.map((g) => [...g]));
+    const projectLineOrder =
+      sanitizeProjectLineOrder(raw.projectLineOrder) ??
+      (base.projectLineOrder
+        ? [...base.projectLineOrder]
+        : [...DEFAULT_PROJECT_LINE_ORDER]);
     return {
       ...base,
       ...raw,
-      // Prefer saved language; default English when missing
       language: raw.language ?? base.language ?? "en",
       bold: raw.bold ?? base.bold ?? true,
       barWidth: raw.barWidth ?? base.barWidth ?? 14,
       statusLines: raw.statusLines ?? base.statusLines ?? 3,
-      display: { ...base.display, ...(raw.display ?? {}) },
+      elementOrder,
+      mergeGroups,
+      projectLineOrder,
+      alignLabels: raw.alignLabels ?? base.alignLabels ?? true,
+      display: {
+        ...base.display,
+        ...(raw.display ?? {}),
+        usageValue:
+          raw.display?.usageValue === "remaining" ||
+          raw.display?.usageValue === "percent"
+            ? raw.display.usageValue
+            : base.display.usageValue ?? "percent",
+        contextValue: normalizeContextValue(
+          raw.display?.contextValue ?? base.display.contextValue,
+        ),
+      },
     };
   } catch {
     return {
       ...PRESET_FULL,
       language: "en",
+      elementOrder: [...DEFAULT_ELEMENT_ORDER],
+      mergeGroups: DEFAULT_MERGE_GROUPS.map((g) => [...g]),
+      projectLineOrder: [...DEFAULT_PROJECT_LINE_ORDER],
       display: { ...PRESET_FULL.display },
     };
   }
+}
+
+function normalizeContextValue(v: unknown): ContextValueMode {
+  if (v === "percent" || v === "tokens" || v === "remaining" || v === "both") {
+    return v;
+  }
+  return "percent";
 }
 
 /** Ensure config exists with English default (idempotent). */
@@ -189,6 +356,9 @@ export function ensureDefaultConfig(
     const cfg = {
       ...PRESET_FULL,
       language: "en" as const,
+      elementOrder: [...DEFAULT_ELEMENT_ORDER],
+      mergeGroups: DEFAULT_MERGE_GROUPS.map((g) => [...g]),
+      projectLineOrder: [...DEFAULT_PROJECT_LINE_ORDER],
       display: { ...PRESET_FULL.display },
     };
     saveHudConfig(cfg, grokHome);
@@ -208,10 +378,39 @@ export function saveHudConfig(
 }
 
 export function applyPreset(preset: HudPreset): HudDisplayConfig {
-  if (preset === "minimal") return { ...PRESET_MINIMAL, display: { ...PRESET_MINIMAL.display } };
-  if (preset === "essential")
-    return { ...PRESET_ESSENTIAL, display: { ...PRESET_ESSENTIAL.display } };
-  return { ...PRESET_FULL, display: { ...PRESET_FULL.display } };
+  if (preset === "minimal") {
+    return {
+      ...PRESET_MINIMAL,
+      elementOrder: PRESET_MINIMAL.elementOrder
+        ? [...PRESET_MINIMAL.elementOrder]
+        : undefined,
+      mergeGroups: PRESET_MINIMAL.mergeGroups?.map((g) => [...g]),
+      projectLineOrder: PRESET_MINIMAL.projectLineOrder
+        ? [...PRESET_MINIMAL.projectLineOrder]
+        : undefined,
+      display: { ...PRESET_MINIMAL.display },
+    };
+  }
+  if (preset === "essential") {
+    return {
+      ...PRESET_ESSENTIAL,
+      elementOrder: PRESET_ESSENTIAL.elementOrder
+        ? [...PRESET_ESSENTIAL.elementOrder]
+        : undefined,
+      mergeGroups: PRESET_ESSENTIAL.mergeGroups?.map((g) => [...g]),
+      projectLineOrder: PRESET_ESSENTIAL.projectLineOrder
+        ? [...PRESET_ESSENTIAL.projectLineOrder]
+        : undefined,
+      display: { ...PRESET_ESSENTIAL.display },
+    };
+  }
+  return {
+    ...PRESET_FULL,
+    elementOrder: [...DEFAULT_ELEMENT_ORDER],
+    mergeGroups: DEFAULT_MERGE_GROUPS.map((g) => [...g]),
+    projectLineOrder: [...DEFAULT_PROJECT_LINE_ORDER],
+    display: { ...PRESET_FULL.display },
+  };
 }
 
 /** Documented display option keys (for settings / docs). */
@@ -219,6 +418,7 @@ export const DISPLAY_OPTION_KEYS = [
   "display.showModel",
   "display.showContextBar",
   "display.contextValue",
+  "display.usageValue",
   "display.showUsage",
   "display.showSessionTime",
   "display.showGit",
@@ -227,6 +427,9 @@ export const DISPLAY_OPTION_KEYS = [
   "display.showAgents",
   "display.showTodos",
   "display.showTokenBreakdown",
+  "elementOrder",
+  "mergeGroups",
+  "alignLabels",
   "lineLayout",
   "pathLevels",
   "language",

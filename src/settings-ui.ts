@@ -16,8 +16,10 @@ import {
   t,
   type HudLang,
 } from "./i18n.js";
-import { defaultGrokHome } from "./session.js";
+import { previewHud } from "./render/compose.js";
+import { defaultGrokHome, emptySessionSnapshot } from "./session.js";
 import { ensureFollowMode } from "./theme.js";
+import type { UsageSnapshot } from "./types.js";
 
 export interface SettingsUiOptions {
   grokHome?: string;
@@ -64,11 +66,78 @@ function printMenu(cfg: HudDisplayConfig, out: (s: string) => void): void {
     }]`,
   );
   out(`│  5) ${s.themeFollow.padEnd(14)}  ${s.themeFollowHint}`);
+  out(
+    `│  6) ${s.alignLabels.padEnd(14)}  [${cfg.alignLabels !== false ? s.on : s.off}]`,
+  );
+  out(
+    `│  7) ${s.usageRemaining.padEnd(14)}  [${
+      cfg.display.usageValue === "remaining" ? s.on : s.off
+    }]`,
+  );
+  out(`│  8) ${s.preview.padEnd(14)}  ${s.previewHint}`);
   out(`│`);
   out(`│  0) ${s.saveExit}`);
   out(`│  q) ${s.quitNoSave}`);
   out(`└──────────────────────────────────────`);
   out("");
+}
+
+function samplePreview(cfg: HudDisplayConfig): string {
+  const snap = emptySessionSnapshot({
+    sessionId: "preview",
+    model: "grok-4.5",
+    cwd: "/Users/dex/demo/CoachFlow",
+    live: true,
+    contextPercent: 42,
+    contextTokensUsed: 210_000,
+    contextWindowTokens: 500_000,
+    turnCount: 4,
+    toolCallCount: 18,
+    durationSeconds: 900,
+    title: "Preview HUD layout",
+    branch: "main",
+    gitDirty: true,
+    tools: [
+      {
+        id: "1",
+        name: "read_file",
+        status: "running",
+        detail: "auth.ts",
+      },
+      { id: "2", name: "grep", status: "completed", count: 3 },
+    ],
+    agents: [
+      {
+        id: "a1",
+        title: "Explore project",
+        status: "active",
+        detail: "scout",
+      },
+    ],
+    todos: [
+      { content: "Ship compose pipeline", status: "in_progress" },
+      { content: "Write tests", status: "completed" },
+    ],
+    lastTurnTokens: {
+      inputTokens: 120_000,
+      outputTokens: 800,
+      cachedReadTokens: 100_000,
+      reasoningTokens: 200,
+      totalTokens: 120_800,
+      modelCalls: 2,
+      cacheHitPct: 83,
+    },
+  });
+  const usage: UsageSnapshot = {
+    available: true,
+    percent: 24,
+    used: 36_000,
+    limit: 150_000,
+    period: "weekly",
+    resetsIn: "3h",
+    message: "GrokBuild 12%",
+  };
+  return previewHud(snap, usage, cfg);
 }
 
 async function pickLanguage(
@@ -222,6 +291,31 @@ export async function runSettingsUi(
       if (ans === "5" || ans === "theme") {
         ensureFollowMode(grokHome);
         out(`  ✓ ${t(cfg.language).themeFollowHint}`);
+        continue;
+      }
+      if (ans === "6" || ans === "align") {
+        cfg = { ...cfg, alignLabels: cfg.alignLabels === false };
+        dirty = true;
+        continue;
+      }
+      if (ans === "7" || ans === "remaining" || ans === "usage") {
+        const next =
+          cfg.display.usageValue === "remaining" ? "percent" : "remaining";
+        cfg = {
+          ...cfg,
+          display: { ...cfg.display, usageValue: next },
+        };
+        dirty = true;
+        continue;
+      }
+      if (ans === "8" || ans === "preview" || ans === "p") {
+        out("");
+        out(`  ── ${s.preview} ──`);
+        for (const line of samplePreview(cfg).split("\n")) {
+          out(`  ${line}`);
+        }
+        out(`  ────────────`);
+        out("");
         continue;
       }
       out(`  ${t(cfg.language).invalid}`);
