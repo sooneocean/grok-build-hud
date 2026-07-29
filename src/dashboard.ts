@@ -15,10 +15,13 @@ import {
   findSessionDirById,
   pickBestSession,
   pickFromActiveSessions,
+  sessionInputFingerprint,
+  isPidAlive,
 } from "./session.js";
 import { getCreditUsage } from "./billing.js";
 import { writeStatusFiles, formatCompactLine } from "./status.js";
 import { resolveTmuxSessionForGrok } from "./multi-session.js";
+import { gitStamp } from "./git.js";
 import type { SessionSnapshot, UsageSnapshot } from "./types.js";
 
 export function dashboardPidPath(grokHome = defaultGrokHome()): string {
@@ -124,29 +127,31 @@ export function listLiveSessions(grokHome = defaultGrokHome()): SessionSnapshot[
   return out;
 }
 
-/** mtime fingerprint of session input files (Phase C diagnostics / tests). */
+/** mtime fingerprint of session input files (alias of sessionInputFingerprint). */
 export function sessionSourceFingerprint(sessionDir: string): string {
-  const names = [
-    "signals.json",
-    "summary.json",
-    "updates.jsonl",
-    "events.jsonl",
-  ];
-  const bits: string[] = [];
-  for (const n of names) {
-    try {
-      const p = path.join(sessionDir, n);
-      if (!fs.existsSync(p)) {
-        bits.push(`${n}:0`);
-        continue;
-      }
-      const st = fs.statSync(p);
-      bits.push(`${n}:${st.mtimeMs}:${st.size}`);
-    } catch {
-      bits.push(`${n}:?`);
-    }
-  }
-  return bits.join("|");
+  return sessionInputFingerprint(sessionDir);
+}
+
+/**
+ * Pre-load skip key: file mtimes + live + git stamp + usage.
+ * When this matches last tick, skip loadSnapshot + writeStatus entirely (1.4).
+ */
+export function dashboardPreKey(
+  sessionId: string,
+  sessionDir: string,
+  options: {
+    live: boolean;
+    cwd?: string;
+    usageKey: string;
+  },
+): string {
+  return [
+    sessionId,
+    sessionInputFingerprint(sessionDir),
+    options.live ? "1" : "0",
+    options.cwd ? gitStamp(options.cwd) : "",
+    options.usageKey,
+  ].join("|");
 }
 
 /**
@@ -183,9 +188,18 @@ export function sessionRenderKey(
 
 /** Last render key per sessionId (in-process dashboard cache). */
 const sessionFpCache = new Map<string, { key: string; at: number }>();
+/** Pre-load skip keys (avoid loadSnapshot when nothing moved). */
+const sessionPreCache = new Map<string, string>();
+/** Last title written per session (skip OSC spam). */
+const sessionTitleCache = new Map<string, string>();
+/** Last known snapshot for skipped primary return. */
+const lastSnapById = new Map<string, SessionSnapshot>();
 
 export function clearDashboardSessionCache(): void {
   sessionFpCache.clear();
+  sessionPreCache.clear();
+  sessionTitleCache.clear();
+  lastSnapById.clear();
 }
 
 function usageKeyOf(usage: UsageSnapshot | null | undefined): string {
@@ -205,18 +219,6 @@ export async function refreshDashboard(options: {
   force?: boolean;
 }): Promise<{ title: string; session: SessionSnapshot | null }> {
   const grokHome = options.grokHome ?? defaultGrokHome();
-  // Parallel Terminals: update EVERY live session independently.
-  // Global "primary" = most recently active (for status.json / hooks fallback).
-  let primary: SessionSnapshot | null = pickFromActiveSessions(grokHome);
-  if (!primary) primary = pickBestSession({ grokHome });
-
-  const live = listLiveSessions(grokHome);
-  const targets =
-    live.length > 0 ? live : primary ? [primary] : [];
-
-  if (!targets.length) {
-    return { title: "◆ grok-hud: no session", session: null };
-  }
 
   let usage: UsageSnapshot | null = null;
   if (!options.noUsage) {
@@ -229,7 +231,6 @@ export async function refreshDashboard(options: {
   const uKey = usageKeyOf(usage);
 
   // Theme always follows Grok [ui].theme (auto → OS light/dark maps).
-  // Fingerprint includes mapping + system appearance so /theme and OS toggle re-paint.
   const {
     resolveTheme,
     readGrokUiConfig,
@@ -250,31 +251,96 @@ export async function refreshDashboard(options: {
       );
       writeTmuxConfFile(grokHome);
       applyTmuxStatusBar({ grokHome });
-      // theme change → force status rewrite
       clearDashboardSessionCache();
     }
   } catch {
     /* ignore */
   }
 
-  // Write per-tmux-session status so each Terminal bar shows ITS own Grok.
-  // New windows are seeded at ctx 0% and never read global status (tmux-hud).
-  for (const snap of targets) {
+  // Build work list from active_sessions — pre-skip before loadSnapshot (1.4)
+  const active = loadActiveSessions(grokHome);
+  type WorkItem = {
+    sessionId: string;
+    dir: string;
+    cwd?: string;
+    pid?: number;
+    live: boolean;
+    preKey: string;
+    skipLoad: boolean;
+  };
+  const work: WorkItem[] = [];
+  for (const a of active) {
+    const dir = findSessionDirById(grokHome, a.session_id);
+    if (!dir) continue;
+    const live = Boolean(a.pid && isPidAlive(a.pid));
+    if (!live) continue;
+    const preKey = dashboardPreKey(a.session_id, dir, {
+      live,
+      cwd: a.cwd,
+      usageKey: uKey,
+    });
+    const skipLoad =
+      !options.force &&
+      sessionPreCache.get(a.session_id) === preKey &&
+      lastSnapById.has(a.session_id);
+    work.push({
+      sessionId: a.session_id,
+      dir,
+      cwd: a.cwd,
+      pid: a.pid,
+      live,
+      preKey,
+      skipLoad,
+    });
+  }
+
+  // Fallback: no live active entries → pickBest once
+  if (!work.length) {
+    let primary: SessionSnapshot | null = pickFromActiveSessions(grokHome);
+    if (!primary) primary = pickBestSession({ grokHome });
+    if (!primary) {
+      return { title: "◆ grok-hud: no session", session: null };
+    }
+    writeStatusFiles(primary, usage, grokHome, {
+      tmuxSession: resolveTmuxSessionForGrok(primary.pid, grokHome),
+      writeGlobal: true,
+    });
+    lastSnapById.set(primary.sessionId, primary);
+    return { title: titleLine(primary, usage), session: primary };
+  }
+
+  const preferredPrimaryId =
+    pickFromActiveSessions(grokHome)?.sessionId ?? work[0]?.sessionId;
+
+  const targets: SessionSnapshot[] = [];
+
+  for (const w of work) {
+    if (w.skipLoad) {
+      const cached = lastSnapById.get(w.sessionId)!;
+      targets.push(cached);
+      continue;
+    }
+
+    const snap = loadSnapshotFromDir(w.dir, { active });
+    if (!snap?.live) continue;
+    lastSnapById.set(snap.sessionId, snap);
+    sessionPreCache.set(snap.sessionId, w.preKey);
+    targets.push(snap);
+
     const rKey = sessionRenderKey(snap, uKey);
     const cached = sessionFpCache.get(snap.sessionId);
     if (!options.force && cached && cached.key === rKey) {
-      continue; // Phase C: skip re-render + disk write when nothing changed
+      continue; // loaded but content identical → skip write
     }
 
     const tmuxSession = resolveTmuxSessionForGrok(snap.pid, grokHome);
     const tty = ttyForPid(snap.pid);
     const isPrimary =
-      primary != null && snap.sessionId === primary.sessionId;
+      snap.sessionId === preferredPrimaryId || work.length === 1;
     writeStatusFiles(snap, usage, grokHome, {
       tmuxSession,
       ttyPath: tty,
-      // Only primary overwrites global status.* (hooks / grok-hud status CLI)
-      writeGlobal: isPrimary || targets.length === 1,
+      writeGlobal: isPrimary,
     });
     sessionFpCache.set(snap.sessionId, {
       key: rKey,
@@ -282,22 +348,21 @@ export async function refreshDashboard(options: {
     });
 
     const title = titleLine(snap, usage);
-    if (tty) {
+    if (tty && sessionTitleCache.get(snap.sessionId) !== title) {
       writeOscTitle(tty, title);
       setAppleTerminalTitle(title, { ttyHint: path.basename(tty) });
+      sessionTitleCache.set(snap.sessionId, title);
     }
   }
 
-  // If somehow no primary write happened, write one
-  if (primary && !targets.some((t) => t.sessionId === primary!.sessionId)) {
-    writeStatusFiles(primary, usage, grokHome, {
-      tmuxSession: resolveTmuxSessionForGrok(primary.pid, grokHome),
-      writeGlobal: true,
-    });
+  if (!targets.length) {
+    return { title: "◆ grok-hud: no session", session: null };
   }
 
-  const session = primary ?? targets[0]!;
-  return { title: titleLine(session, usage), session };
+  const primary =
+    targets.find((t) => t.sessionId === preferredPrimaryId) ?? targets[0]!;
+
+  return { title: titleLine(primary, usage), session: primary };
 }
 
 export function isDashboardRunning(grokHome = defaultGrokHome()): boolean {

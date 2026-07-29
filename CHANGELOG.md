@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.0
+
+### Performance — pre-load dashboard skip
+- **Pre-load skip key**: if session files + live + git stamp + usage unchanged,
+  dashboard **skips `loadSnapshot` entirely** (not only skip write).
+- **OSC title cache**: rewrite Terminal title only when the title string changes.
+- `sessionSourceFingerprint` aliases shared `sessionInputFingerprint`.
+- Idle multi-terminal ticks do less JSON/git work when nothing moved.
+
 ## 1.3.0
 
 ### Performance — dashboard tick hot path

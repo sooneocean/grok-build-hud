@@ -83,7 +83,7 @@ export function clearGitInfoCache(): void {
 }
 
 /** Cheap invalidation key: HEAD + index mtimes (when available). */
-function gitStamp(cwd: string): string {
+export function gitStamp(cwd: string): string {
   const bits: string[] = [];
   for (const rel of [".git/HEAD", ".git/index", ".git/FETCH_HEAD"]) {
     try {

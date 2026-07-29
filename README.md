@@ -23,7 +23,7 @@ Grok 4.5 · AI FILM SPACE/0717 · ●
 | 语言 | 默认 **English**，可切简体中文 / 繁體 |
 
 仓库：http://172.238.15.154:3000/Redredchen01/grok-build-hud  
-插件名：`grok-build-hud` · **1.3.0**（版本见 [`plugin.json`](./plugin.json)）
+插件名：`grok-build-hud` · **1.4.0**（版本见 [`plugin.json`](./plugin.json)）
 
 > **说明：** 本项目由我们自行开发与维护，**不是** xAI / Grok Build 官方插件或官方功能。仅兼容 Grok 的插件安装机制（`plugin.json` 等），便于本地 `grok plugin install`。
 
@@ -401,7 +401,7 @@ grok-build-hud/               # Gitea 仓库目录名
 
 **不上传**你的代码。无遥测 / 分析 SDK，详见 [PRIVACY.md](./PRIVACY.md)。
 
-性能（1.3）：`updates.jsonl` 单遍读取、git 短缓存、session 文件 mtime 命中跳过重解析；`showSpeed` 关时不写 speed-cache。
+性能（1.3–1.4）：`updates.jsonl` 单遍、git 短缓存、session mtime 缓存；dashboard 在文件/live/git/配额都未变时**整 tick 跳过加载**；OSC 标题仅变化时写；`showSpeed` 关时不写 speed-cache。
 
 ### 发版（维护者）
 
