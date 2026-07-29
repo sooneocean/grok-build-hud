@@ -44,6 +44,92 @@ export function dashboardLogPath(grokHome = defaultGrokHome()): string {
   return path.join(grokHome, "hud", "dashboard.log");
 }
 
+export function dashboardHeartbeatPath(grokHome = defaultGrokHome()): string {
+  return path.join(grokHome, "hud", "dashboard.heartbeat");
+}
+
+/** Successful refresh tick marker for doctor liveness (1.10). */
+export function touchDashboardHeartbeat(
+  grokHome = defaultGrokHome(),
+  options: { now?: number; pid?: number } = {},
+): void {
+  const p = dashboardHeartbeatPath(grokHome);
+  try {
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    const now = options.now ?? Date.now();
+    const pid = options.pid ?? process.pid;
+    const body = `${now}\n${pid}\n`;
+    const tmp = `${p}.${pid}.tmp`;
+    fs.writeFileSync(tmp, body, "utf8");
+    fs.renameSync(tmp, p);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function inspectDashboardHeartbeat(
+  grokHome = defaultGrokHome(),
+  options: { now?: number; maxAgeMs?: number } = {},
+): {
+  path: string;
+  exists: boolean;
+  ageMs: number | null;
+  pid: number | null;
+  fresh: boolean;
+  detail: string;
+} {
+  const p = dashboardHeartbeatPath(grokHome);
+  const now = options.now ?? Date.now();
+  // Default: stale if no successful tick for 30s (covers 500ms–2s intervals)
+  const maxAge = options.maxAgeMs ?? 30_000;
+  if (!fs.existsSync(p)) {
+    return {
+      path: p,
+      exists: false,
+      ageMs: null,
+      pid: null,
+      fresh: false,
+      detail: "no heartbeat yet",
+    };
+  }
+  try {
+    const lines = fs.readFileSync(p, "utf8").trim().split(/\n/);
+    const ts = Number(lines[0]);
+    const pid = Number(lines[1]);
+    if (!Number.isFinite(ts) || ts <= 0) {
+      return {
+        path: p,
+        exists: true,
+        ageMs: null,
+        pid: null,
+        fresh: false,
+        detail: "heartbeat unreadable",
+      };
+    }
+    const ageMs = Math.max(0, now - ts);
+    const fresh = ageMs <= maxAge;
+    return {
+      path: p,
+      exists: true,
+      ageMs,
+      pid: Number.isFinite(pid) && pid > 0 ? pid : null,
+      fresh,
+      detail: fresh
+        ? `heartbeat ${Math.round(ageMs / 1000)}s ago`
+        : `heartbeat stale (${Math.round(ageMs / 1000)}s) — daemon may be stuck`,
+    };
+  } catch {
+    return {
+      path: p,
+      exists: true,
+      ageMs: null,
+      pid: null,
+      fresh: false,
+      detail: "heartbeat read error",
+    };
+  }
+}
+
 function isOurDashboardCommand(cmd: string): boolean {
   const c = cmd.toLowerCase();
   return (
@@ -673,6 +759,7 @@ export async function refreshDashboard(options: {
     let primary: SessionSnapshot | null = pickFromActiveSessions(grokHome);
     if (!primary) primary = pickBestSession({ grokHome });
     if (!primary) {
+      touchDashboardHeartbeat(grokHome);
       return { title: "◆ grok-hud: no session", session: null };
     }
     writeStatusFiles(primary, usage, grokHome, {
@@ -680,6 +767,7 @@ export async function refreshDashboard(options: {
       writeGlobal: true,
     });
     lastSnapById.set(primary.sessionId, primary);
+    touchDashboardHeartbeat(grokHome);
     return { title: titleLine(primary, usage), session: primary };
   }
 
@@ -741,12 +829,14 @@ export async function refreshDashboard(options: {
   }
 
   if (!targets.length) {
+    touchDashboardHeartbeat(grokHome);
     return { title: "◆ grok-hud: no session", session: null };
   }
 
   const primary =
     targets.find((t) => t.sessionId === preferredPrimaryId) ?? targets[0]!;
 
+  touchDashboardHeartbeat(grokHome);
   return { title: titleLine(primary, usage), session: primary };
 }
 
@@ -921,6 +1011,8 @@ export function ensureDashboardDaemon(options: {
   intervalMs?: number;
 }): { started: boolean; alreadyRunning: boolean; pid?: number } {
   const grokHome = options.grokHome ?? defaultGrokHome();
+  // Drop dead pid/lock so isDashboardRunning / lock acquire stay honest (1.10)
+  clearStaleDashboardState(grokHome);
   if (isDashboardRunning(grokHome)) {
     return { started: false, alreadyRunning: true };
   }
@@ -1105,6 +1197,16 @@ export async function runDashboardLoop(options: {
       if (fs.existsSync(p)) {
         const cur = Number(fs.readFileSync(p, "utf8").trim());
         if (cur === process.pid) fs.unlinkSync(p);
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      const hb = dashboardHeartbeatPath(grokHome);
+      if (fs.existsSync(hb)) {
+        const lines = fs.readFileSync(hb, "utf8").trim().split(/\n/);
+        const owner = Number(lines[1]);
+        if (!Number.isFinite(owner) || owner === process.pid) fs.unlinkSync(hb);
       }
     } catch {
       /* ignore */

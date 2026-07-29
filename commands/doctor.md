@@ -34,7 +34,7 @@ Checks (local only, no network required for most):
 | Build (dist/) | compiled package |
 | HUD config | `~/.grok/hud/config.json` parse (**fail** if invalid JSON) |
 | Grok auth | credentials for quota |
-| Dashboard daemon | pid alive; **warn** on stale pid file |
+| Dashboard daemon | pid alive; **warn** on stale pid / **stale heartbeat** (no tick ≥30s) |
 | Dashboard log | recent `refresh error` lines in `dashboard.log` (last 15m) |
 | Status files | `status.txt` freshness |
 | Hooks | `~/.grok/hooks/grok-build-hud.json` |

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.10.0
+
+### I/O integrity + daemon heartbeat
+- **Atomic status writes**: `status*.txt` / `status.json` / `.content-fp` use
+  write-temp + rename (no torn reads for tmux).
+- **`dashboard.heartbeat`**: each successful `refreshDashboard` tick; doctor
+  warns if pid is live but heartbeat older than 30s (stuck daemon).
+- **`ensureDashboardDaemon`**: `clearStaleDashboardState` before start.
+- Cleanup removes heartbeat with pid/lock.
+- **`info`**: shows version + daemon file paths + health commands.
+- **`scripts/smoke.sh`**: asserts `--version` == package.json; optional bench;
+  notes status/heartbeat presence.
+- Tests: `tests/io-integrity.test.ts`.
+
 ## 1.9.0
 
 ### Doctor --fix: stale state, log rotate, bad config quarantine

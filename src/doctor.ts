@@ -14,6 +14,7 @@ import {
   stopDashboard,
   inspectDashboardLog,
   inspectDashboardPidFile,
+  inspectDashboardHeartbeat,
   clearStaleDashboardState,
   rotateDashboardLogIfNeeded,
   DASHBOARD_LOG_MAX_BYTES,
@@ -195,12 +196,24 @@ export function runDoctor(
   const pidInfo = inspectDashboardPidFile(grokHome);
   const dash = isDashboardRunning(grokHome);
   if (dash) {
-    checks.push({
-      id: "dashboard",
-      level: "ok",
-      title: "Dashboard daemon",
-      detail: pidInfo.detail,
-    });
+    const hb = inspectDashboardHeartbeat(grokHome, { now, maxAgeMs: 30_000 });
+    if (hb.exists && !hb.fresh) {
+      checks.push({
+        id: "dashboard",
+        level: "warn",
+        title: "Dashboard daemon",
+        detail: `${pidInfo.detail}; ${hb.detail} — try grok-hud doctor --fix`,
+      });
+    } else {
+      checks.push({
+        id: "dashboard",
+        level: "ok",
+        title: "Dashboard daemon",
+        detail: hb.exists
+          ? `${pidInfo.detail}; ${hb.detail}`
+          : `${pidInfo.detail}; heartbeat pending`,
+      });
+    }
   } else if (pidInfo.stale) {
     checks.push({
       id: "dashboard",

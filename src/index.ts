@@ -381,8 +381,18 @@ export function formatHudInfo(grokHome: string): string {
   const cfgPath = path.join(grokHome, "hud", "config.json");
   const d = cfg.display;
   const onOff = (v: boolean | undefined) => (v ? "on" : "off");
+  let pkgVer = "?";
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(packageRoot(), "package.json"), "utf8"),
+    ) as { version?: string };
+    pkgVer = pkg.version ?? "?";
+  } catch {
+    /* ignore */
+  }
   const lines = [
     `grok-build-hud info`,
+    `  version:    ${pkgVer}`,
     `  config:     ${cfgPath}`,
     `  aesthetic:  ${cfg.aesthetic ?? "classic"}`,
     `  density:    ${cfg.density ?? "comfortable"}`,
@@ -412,9 +422,11 @@ export function formatHudInfo(grokHome: string): string {
     `  2. events / turn_completed estimates`,
     `  3. empty / 0%`,
     ``,
-    `Status files: ~/.grok/hud/status*.txt  (content-fp + dashboard skip-write)`,
+    `Status files: ~/.grok/hud/status*.txt  (atomic write + content-fp + skip-write)`,
     `Sidecar:      ~/.grok/hud/usage-sidecar.json`,
+    `Daemon:       dashboard.pid · dashboard.lock · dashboard.heartbeat · dashboard.log`,
     `Settings:     grok-hud settings  (a/b/c/d toggle optional chips)`,
+    `Health:       grok-hud doctor  |  grok-hud doctor --fix  |  grok-hud bench`,
   ];
   return lines.join("\n");
 }

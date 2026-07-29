@@ -61,6 +61,30 @@ export function hudDataDir(grokHome = defaultGrokHome()): string {
 }
 
 /**
+ * Write then rename into place (1.10) — tmux/readers never see half a file.
+ * Same-dir rename is atomic on APFS/HFS+/ext4.
+ */
+export function atomicWriteFile(filePath: string, content: string): void {
+  const dir = path.dirname(filePath);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = path.join(
+    dir,
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`,
+  );
+  try {
+    fs.writeFileSync(tmp, content, "utf8");
+    fs.renameSync(tmp, filePath);
+  } catch (e) {
+    try {
+      if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+    } catch {
+      /* ignore */
+    }
+    throw e;
+  }
+}
+
+/**
  * Palette for HUD: follow Grok theme, optional codex calm swap, then colors.* overrides.
  */
 export function themeForHudConfig(
@@ -615,17 +639,17 @@ export function writeStatusFiles(
     } catch {
       /* write anyway */
     }
-    fs.writeFileSync(path.join(targetDir, "status-line.txt"), compact + "\n", "utf8");
-    fs.writeFileSync(path.join(targetDir, "status.txt"), full + "\n", "utf8");
-    fs.writeFileSync(path.join(targetDir, "tmux-status.txt"), single + "\n", "utf8");
-    fs.writeFileSync(path.join(targetDir, "tmux-lines.txt"), padded.join("\n") + "\n", "utf8");
-    fs.writeFileSync(
+    // Atomic per-file writes (1.10) so readers never observe partial content
+    atomicWriteFile(path.join(targetDir, "status-line.txt"), compact + "\n");
+    atomicWriteFile(path.join(targetDir, "status.txt"), full + "\n");
+    atomicWriteFile(path.join(targetDir, "tmux-status.txt"), single + "\n");
+    atomicWriteFile(path.join(targetDir, "tmux-lines.txt"), padded.join("\n") + "\n");
+    atomicWriteFile(
       path.join(targetDir, "status.json"),
-      JSON.stringify(payload, null, 2),
-      "utf8",
+      JSON.stringify(payload, null, 2) + "\n",
     );
     try {
-      fs.writeFileSync(fpPath, fingerprint + "\n", "utf8");
+      atomicWriteFile(fpPath, fingerprint + "\n");
     } catch {
       /* ignore */
     }
