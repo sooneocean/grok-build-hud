@@ -323,22 +323,37 @@ function printFrame(
   const grokHome = opts.grokHome ?? defaultGrokHome();
   const hudCfg = loadHudConfig(grokHome);
   const chunks: string[] = [];
-  for (const s of list) {
+  const useColor = !opts.noColor && !opts.tmux;
+  for (let i = 0; i < list.length; i++) {
+    const s = list[i]!;
     if (opts.json) {
       chunks.push(renderJson(s, usage));
-    } else {
-      chunks.push(
-        renderHud(s, usage, {
-          color: !opts.noColor && !opts.tmux,
-          tmux: opts.tmux,
-          pathLevels: hudCfg.pathLevels ?? cfg.pathLevels,
-          warningThreshold: hudCfg.warningThreshold ?? cfg.warningThreshold,
-          criticalThreshold: hudCfg.criticalThreshold ?? cfg.criticalThreshold,
-          grokHome,
-          cfg: hudCfg,
-        }),
-      );
+      continue;
     }
+    let block = renderHud(s, usage, {
+      color: useColor,
+      tmux: opts.tmux,
+      pathLevels: hudCfg.pathLevels ?? cfg.pathLevels,
+      warningThreshold: hudCfg.warningThreshold ?? cfg.warningThreshold,
+      criticalThreshold: hudCfg.criticalThreshold ?? cfg.criticalThreshold,
+      grokHome,
+      cfg: hudCfg,
+    });
+    // D3: multi-session list — dim / indent non-primary
+    if (opts.all && i > 0) {
+      if (useColor) {
+        block = block
+          .split("\n")
+          .map((ln) => `\x1b[2m${ln}\x1b[0m`)
+          .join("\n");
+      } else {
+        block = block
+          .split("\n")
+          .map((ln) => `  ${ln}`)
+          .join("\n");
+      }
+    }
+    chunks.push(block);
   }
   out(chunks.join(opts.json ? "\n" : "\n\n"));
 }

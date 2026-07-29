@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0
+
+### Design aesthetics (Wave D3 — dense chips & stable width)
+- **Dense chip line**: one scannable row  
+  `[G4.5] · path · ● · 窗42% · 额24% · ◐read_file`  
+  (`aesthetic: dense` / `density: dense`).
+- **CJK-aware layout**: `visibleLen` / `trimVisible` / `fitSegments` use
+  visual cell width (Chinese = 2) after stripping tmux styles.
+- **Resize hysteresis**: width only updates when it moves by ≥2 columns
+  (stops strip thrashing while dragging the window).
+- **Multi-session list**: `--all` dims (or indents) non-primary sessions.
+
 ## 0.4.4
 
 ### Design aesthetics (Wave D2 — semantic color & calm live)

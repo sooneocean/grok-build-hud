@@ -36,6 +36,13 @@ export function displayModel(model: string): string {
   return model.replace(/^grok-/i, "Grok ").replace(/-/g, " ");
 }
 
+/** Dense chip: grok-4.5 → G4.5 */
+export function displayModelShort(model: string): string {
+  if (!model || model === "unknown") return "G";
+  const full = displayModel(model);
+  return full.replace(/^Grok\s+/i, "G").replace(/\s+/g, "");
+}
+
 export function contextValueText(
   session: SessionSnapshot,
   mode: HudDisplayConfig["display"]["contextValue"],
@@ -427,14 +434,80 @@ function elementFragment(
 }
 
 /**
+ * Dense one-line chip (Codex-bar-ish):
+ *   [G4.5] · path · ● · 窗42% · 额24% · ◐read_file
+ */
+export function composeDenseChip(
+  session: SessionSnapshot,
+  usage?: UsageSnapshot | null,
+  cfg: HudDisplayConfig = loadHudConfig(),
+): string {
+  const L = stringsFromConfig(cfg);
+  const sep = separatorString(cfg.separator ?? "space").trim() || " ";
+  const join = sep.length === 1 ? ` ${sep} ` : sep;
+  const bits: string[] = [];
+
+  if (cfg.display.showModel !== false) {
+    bits.push(`[${displayModelShort(session.model)}]`);
+  }
+  if (cfg.display.showProject !== false) {
+    let proj = projectLabel(session.cwd, cfg.pathLevels ?? 1);
+    // dense: keep last segment only when long
+    if (proj.length > 18) {
+      const tail = proj.split("/").pop() || proj;
+      proj = tail.length > 16 ? truncateVisible(tail, 14) : tail;
+    }
+    if (cfg.display.showGit && session.branch) {
+      const dirty = cfg.display.showGitDirty && session.gitDirty ? "*" : "";
+      proj += `:${session.branch}${dirty}`;
+    }
+    bits.push(proj);
+  }
+  if (cfg.display.showLive !== false) {
+    bits.push(session.live ? "●" : "○");
+  }
+  bits.push(`${L.ctx}${Math.round(session.contextPercent)}%`);
+  if (cfg.display.showUsage !== false && usage?.available && usage.percent != null) {
+    const u =
+      cfg.display.usageValue === "remaining"
+        ? Math.max(0, Math.round(100 - usage.percent))
+        : Math.round(usage.percent);
+    bits.push(`${L.use}${u}%`);
+  }
+  if (cfg.display.showToolActivity !== false && session.tools?.length) {
+    const run = session.tools.find((t) => t.status === "running");
+    if (run) {
+      bits.push(`◐${run.name}`);
+    } else {
+      const done = session.tools.find((t) => t.status === "completed");
+      if (done) bits.push(`✓${done.name}`);
+    }
+  }
+  return bits.join(join);
+}
+
+function wantsDenseChip(cfg: HudDisplayConfig): boolean {
+  return (
+    cfg.aesthetic === "dense" ||
+    cfg.density === "dense" ||
+    (cfg.lineLayout === "compact" && cfg.statusLines === 1 && cfg.barStyle === "dot")
+  );
+}
+
+/**
  * Compose semantic HUD lines (no ANSI, no tmux codes).
  * Uses elementOrder + mergeGroups (Claude-HUD-style).
+ * Dense aesthetic → single chip line.
  */
 export function composeHudLines(
   session: SessionSnapshot,
   usage?: UsageSnapshot | null,
   cfg: HudDisplayConfig = loadHudConfig(),
 ): string[] {
+  if (wantsDenseChip(cfg)) {
+    return [composeDenseChip(session, usage, cfg)];
+  }
+
   const L = stringsFromConfig(cfg);
   const order = resolveOrder(cfg);
   const groups = resolveMergeGroups(cfg);

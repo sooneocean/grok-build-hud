@@ -80,12 +80,12 @@ Codex App 像 **「安静的仪表」**：少色、轻分隔、状态才上色�
 - [x] THEME_CODEX_LIGHT（浅色 codex）纸色底 + 深墨数字
 - [x] `colors.*` 用户覆盖（hex）合并进 palette
 
-### Wave D3 — 窄窗与芯片布局（0.5.0）
+### Wave D3 — 窄窗与芯片布局（0.5.0）✅
 
-- [ ] dense 模式 1 行 chip：`[G4.5] · 窗42% · 额24% · ◐read`
-- [ ] CJK width 全面接管 trim（layout.ts 与 width.ts 合并）
-- [ ] 窗口 resize 不抖：pad 稳定 3 行空位（已有）+ 防抖动阈值
-- [ ] 多 session 时 dim 非当前（仅 plain status 列表）
+- [x] dense 模式 1 行 chip：`[G4.5] · 窗42% · 额24% · ◐read`
+- [x] CJK width 全面接管 trim（layout.ts 用 width.ts 视觉宽）
+- [x] 窗口 resize 不抖：hysteresis ≥2 cols
+- [x] 多 session 时 dim 非当前（`--all` plain 列表）
 
 ### Wave D4 — CodexBar 级配额体验（0.5.x）
 
