@@ -637,6 +637,49 @@ export function ensureDefaultConfig(
   return loadHudConfig(grokHome);
 }
 
+/**
+ * If config.json is invalid JSON, quarantine it and write a fresh default (1.9).
+ * Safe: never deletes without backup; no network.
+ */
+export function repairInvalidHudConfig(
+  grokHome = path.join(os.homedir(), ".grok"),
+): {
+  repaired: boolean;
+  detail: string;
+  backupPath?: string;
+} {
+  const probe = probeHudConfig(grokHome);
+  if (probe.status === "ok") {
+    return { repaired: false, detail: "config valid — no repair" };
+  }
+  if (probe.status === "missing") {
+    const cfg = ensureDefaultConfig(grokHome);
+    return {
+      repaired: true,
+      detail: `created default config (aesthetic=${cfg.aesthetic ?? "classic"})`,
+    };
+  }
+  // invalid
+  const p = probe.path;
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = `${p}.bad-${stamp}`;
+  try {
+    fs.renameSync(p, backupPath);
+    clearHudConfigCache();
+    ensureDefaultConfig(grokHome);
+    return {
+      repaired: true,
+      detail: `quarantined bad config → ${backupPath}; wrote default`,
+      backupPath,
+    };
+  } catch (e) {
+    return {
+      repaired: false,
+      detail: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
 export function saveHudConfig(
   cfg: HudDisplayConfig,
   grokHome = path.join(os.homedir(), ".grok"),

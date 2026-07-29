@@ -14,13 +14,15 @@ grok-build-hud --doctor --fix
 
 ## `--fix` (safe only)
 
-- ensure `config.json`
+- ensure / **repair** `config.json` (invalid JSON → quarantine `config.json.bad-*` + default)
+- **clear stale** `dashboard.pid` / `dashboard.lock` (only if daemon not live)
+- **rotate** oversized `dashboard.log` → `.log.1` (default ≥1MB)
 - install hooks if missing
 - rewrite tmux conf + apply bar
 - restart dashboard daemon
 - force status refresh  
 
-Does **not**: `brew install`, `grok login`, force-push, delete data.
+Does **not**: `brew install`, `grok login`, force-push, delete unrelated data.
 
 Checks (local only, no network required for most):
 

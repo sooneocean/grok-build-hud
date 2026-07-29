@@ -14,12 +14,16 @@ import {
   stopDashboard,
   inspectDashboardLog,
   inspectDashboardPidFile,
+  clearStaleDashboardState,
+  rotateDashboardLogIfNeeded,
+  DASHBOARD_LOG_MAX_BYTES,
 } from "./dashboard.js";
 import {
   loadHudConfig,
   configPath,
   ensureDefaultConfig,
   probeHudConfig,
+  repairInvalidHudConfig,
 } from "./hud-config.js";
 import { packageRoot, installGlobalHooks } from "./install.js";
 import { writeTmuxConfFile, applyTmuxStatusBar } from "./tmux-hud.js";
@@ -234,11 +238,21 @@ export function runDoctor(
       detail: `${logInfo.recentErrorCount} refresh error(s) in last 15m (${ageS}) — ${logInfo.path}${logInfo.lastErrorLine ? `: ${logInfo.lastErrorLine}` : ""}`,
     });
   } else {
+    // Soft hint if log is large (rotate on --fix / next error append)
+    let sizeNote = "";
+    try {
+      const sz = fs.statSync(logInfo.path).size;
+      if (sz >= DASHBOARD_LOG_MAX_BYTES) {
+        sizeNote = ` · ${Math.round(sz / 1024)}KB (over rotate threshold — doctor --fix)`;
+      }
+    } catch {
+      /* ignore */
+    }
     checks.push({
       id: "dashboard-log",
-      level: "ok",
+      level: sizeNote ? "warn" : "ok",
       title: "Dashboard log",
-      detail: `${logInfo.path} (no recent refresh errors)`,
+      detail: `${logInfo.path} (no recent refresh errors)${sizeNote}`,
     });
   }
 
@@ -363,7 +377,9 @@ export interface DoctorFixReport {
 
 /**
  * Safe local repairs only (no brew, no network login, no force-push).
- * - ensure config.json
+ * - repair / ensure config.json (quarantine invalid JSON)
+ * - clear stale dashboard pid/lock
+ * - rotate oversized dashboard.log
  * - reinstall hooks if missing
  * - restart dashboard daemon
  * - rewrite tmux conf + apply bar
@@ -376,17 +392,62 @@ export async function runDoctorFix(
   const before = runDoctor({ grokHome });
   const actions: DoctorFixAction[] = [];
 
-  // Config
+  // Config — quarantine invalid JSON, else ensure default (1.9)
   try {
-    ensureDefaultConfig(grokHome);
-    actions.push({
-      id: "config",
-      ok: true,
-      detail: `config ready: ${configPath(grokHome)}`,
-    });
+    const repair = repairInvalidHudConfig(grokHome);
+    if (repair.repaired) {
+      actions.push({
+        id: "config",
+        ok: true,
+        detail: repair.detail,
+      });
+    } else {
+      ensureDefaultConfig(grokHome);
+      actions.push({
+        id: "config",
+        ok: true,
+        detail: `config ready: ${configPath(grokHome)}`,
+      });
+    }
   } catch (e) {
     actions.push({
       id: "config",
+      ok: false,
+      detail: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  // Stale pid / lock (1.9)
+  try {
+    const stale = clearStaleDashboardState(grokHome);
+    actions.push({
+      id: "stale-state",
+      ok: true,
+      detail: stale.detail,
+    });
+  } catch (e) {
+    actions.push({
+      id: "stale-state",
+      ok: false,
+      detail: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  // Log rotate if oversized (1.9)
+  try {
+    const rot = rotateDashboardLogIfNeeded(grokHome);
+    actions.push({
+      id: "log-rotate",
+      ok: true,
+      detail: rot.rotated
+        ? `rotated ${rot.size}B → ${rot.archived}`
+        : rot.size > 0
+          ? `log ${rot.size}B < ${DASHBOARD_LOG_MAX_BYTES}B — no rotate`
+          : "no dashboard.log",
+    });
+  } catch (e) {
+    actions.push({
+      id: "log-rotate",
       ok: false,
       detail: e instanceof Error ? e.message : String(e),
     });

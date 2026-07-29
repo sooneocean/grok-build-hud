@@ -162,6 +162,116 @@ export function releaseDashboardLock(
   }
 }
 
+/** Default rotate threshold for dashboard.log (1.9). */
+export const DASHBOARD_LOG_MAX_BYTES = 1_000_000;
+
+/**
+ * Rotate dashboard.log → dashboard.log.1 when over maxBytes.
+ * Keeps one previous generation only (safe, local, no network).
+ */
+export function rotateDashboardLogIfNeeded(
+  grokHome = defaultGrokHome(),
+  options: { maxBytes?: number } = {},
+): { rotated: boolean; size: number; path: string; archived?: string } {
+  const logPath = dashboardLogPath(grokHome);
+  const maxBytes = options.maxBytes ?? DASHBOARD_LOG_MAX_BYTES;
+  if (!fs.existsSync(logPath)) {
+    return { rotated: false, size: 0, path: logPath };
+  }
+  try {
+    const size = fs.statSync(logPath).size;
+    if (size < maxBytes) {
+      return { rotated: false, size, path: logPath };
+    }
+    const archived = `${logPath}.1`;
+    try {
+      if (fs.existsSync(archived)) fs.unlinkSync(archived);
+    } catch {
+      /* ignore */
+    }
+    fs.renameSync(logPath, archived);
+    return { rotated: true, size, path: logPath, archived };
+  } catch {
+    return { rotated: false, size: 0, path: logPath };
+  }
+}
+
+/**
+ * Clear stale pid/lock when no live dashboard is running (1.9 doctor --fix).
+ * Does not kill a healthy daemon.
+ */
+export function clearStaleDashboardState(
+  grokHome = defaultGrokHome(),
+): {
+  clearedPid: boolean;
+  clearedLock: boolean;
+  detail: string;
+} {
+  let clearedPid = false;
+  let clearedLock = false;
+  const bits: string[] = [];
+
+  if (isDashboardRunning(grokHome)) {
+    return {
+      clearedPid: false,
+      clearedLock: false,
+      detail: "daemon live — left pid/lock alone",
+    };
+  }
+
+  const pidInfo = inspectDashboardPidFile(grokHome);
+  if (pidInfo.exists && (pidInfo.stale || !pidInfo.running)) {
+    try {
+      fs.unlinkSync(pidInfo.path);
+      clearedPid = true;
+      bits.push(`removed stale pid file (${pidInfo.detail})`);
+    } catch (e) {
+      bits.push(
+        `pid file: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  } else if (!pidInfo.exists) {
+    bits.push("no pid file");
+  }
+
+  const lockPath = dashboardLockPath(grokHome);
+  if (fs.existsSync(lockPath)) {
+    let holder = 0;
+    try {
+      holder = Number(
+        fs.readFileSync(lockPath, "utf8").trim().split(/\n/)[0] ?? "",
+      );
+    } catch {
+      holder = 0;
+    }
+    const holderLive =
+      holder > 0 && isAlivePid(holder) && isOurDashboardCommand(processCommandLine(holder) ?? "");
+    if (!holderLive) {
+      try {
+        fs.unlinkSync(lockPath);
+        clearedLock = true;
+        bits.push(
+          holder > 0
+            ? `removed stale lock (holder ${holder})`
+            : "removed orphan lock",
+        );
+      } catch (e) {
+        bits.push(`lock: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    } else {
+      bits.push(`lock held by live pid ${holder}`);
+    }
+  } else {
+    bits.push("no lock file");
+  }
+
+  return {
+    clearedPid,
+    clearedLock,
+    detail: bits.join("; "),
+  };
+}
+
 /** Recent dashboard.log refresh errors for doctor (1.8). */
 export function inspectDashboardLog(
   grokHome = defaultGrokHome(),
@@ -917,6 +1027,7 @@ export function appendDashboardError(
   if (now - last < minInterval) return;
   lastDashboardErrorAt.set(grokHome, now);
   try {
+    rotateDashboardLogIfNeeded(grokHome);
     const logPath = dashboardLogPath(grokHome);
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
     const msg = err instanceof Error ? err.stack || err.message : String(err);

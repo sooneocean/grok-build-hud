@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.9.0
+
+### Doctor --fix: stale state, log rotate, bad config quarantine
+- **`clearStaleDashboardState`**: remove dead `dashboard.pid` / orphan
+  `dashboard.lock` (never touches a live daemon).
+- **`rotateDashboardLogIfNeeded`**: when log ≥1MB → `dashboard.log.1`; also
+  runs before each error append so the file cannot grow forever.
+- **`repairInvalidHudConfig`**: bad JSON → `config.json.bad-<stamp>` + default.
+- **`doctor --fix`** runs all three before hooks/tmux/restart.
+- Doctor warns when log is oversized even with no recent errors.
+- Tests: `tests/doctor-fix.test.ts`.
+
 ## 1.8.0
 
 ### Ops observability — doctor + single-writer lock
