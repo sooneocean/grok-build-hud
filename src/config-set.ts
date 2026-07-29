@@ -7,6 +7,9 @@ import {
   applyPreset,
   configPath,
   loadHudConfig,
+  parseElementOrderCsv,
+  parseMergeGroupsCsv,
+  parseProjectLineCsv,
   saveHudConfig,
   type HudAesthetic,
   type HudDisplayConfig,
@@ -251,6 +254,46 @@ export function applyConfigSet(
       },
     };
   }
+  if (k === "elementorder" || k === "elements") {
+    const order = parseElementOrderCsv(v);
+    if (!order?.length) {
+      return {
+        cfg,
+        error:
+          "elementOrder needs comma list: project,context,usage,tokens,meta,tools,agents,todos",
+      };
+    }
+    return { cfg: { ...cfg, elementOrder: order } };
+  }
+  if (k === "projectlineorder" || k === "projectline") {
+    const order = parseProjectLineCsv(v);
+    if (!order?.length) {
+      return {
+        cfg,
+        error: "projectLineOrder needs: model,project,live,title,effort",
+      };
+    }
+    return { cfg: { ...cfg, projectLineOrder: order } };
+  }
+  if (k === "mergegroups" || k === "merge") {
+    if (v === "" || v === "[]" || v === "none" || v === "off") {
+      return { cfg: { ...cfg, mergeGroups: [] } };
+    }
+    const groups = parseMergeGroupsCsv(v);
+    if (!groups?.length) {
+      return {
+        cfg,
+        error: "mergeGroups e.g. context,usage;tools,agents  (or none)",
+      };
+    }
+    return { cfg: { ...cfg, mergeGroups: groups } };
+  }
+  if (k === "linelayout") {
+    if (v !== "expanded" && v !== "compact") {
+      return { cfg, error: "lineLayout must be expanded|compact" };
+    }
+    return { cfg: { ...cfg, lineLayout: v } };
+  }
 
   const field = DISPLAY_BOOL[k];
   if (field) {
@@ -314,8 +357,13 @@ Keys: aesthetic | preset | language | density | autoDenseBelow | timeFormat
       usageEmphasisThreshold | statusLines | separator | barStyle | barWidth
       pathLevels | tokenReveal | warningThreshold | criticalThreshold
       alignLabels | bold | tokenDigits | tokenScope | contextValue | usageValue
+      elementOrder | projectLineOrder | mergeGroups | lineLayout
       showGitFileStats | showCompactions | showSpeed | showGitAheadBehind
       showDiffStats | showTokenBreakdown | showTitle | showLive | …
+
+elementOrder:  project,context,usage,tools
+mergeGroups:   context,usage;tools,agents   (or none)
+projectLine:   model,project,live
 
 Config: ${path.join("~/.grok/hud", "config.json")}
 Privacy: no telemetry — only local files + your Grok auth for quota API.`;
@@ -354,6 +402,10 @@ export function getConfigValue(
         "tokenScope",
         "contextValue",
         "usageValue",
+        "elementOrder",
+        "projectLineOrder",
+        "mergeGroups",
+        "lineLayout",
         ...Object.values(DISPLAY_BOOL).map((f) => `display.${f}`),
       ].join("\n"),
     };
@@ -414,6 +466,28 @@ export function getConfigValue(
   }
   if (k === "usagevalue") {
     return { ok: true, text: String(cfg.display.usageValue) };
+  }
+  if (k === "elementorder" || k === "elements") {
+    return {
+      ok: true,
+      text: (cfg.elementOrder ?? []).join(","),
+    };
+  }
+  if (k === "projectlineorder" || k === "projectline") {
+    return {
+      ok: true,
+      text: (cfg.projectLineOrder ?? []).join(","),
+    };
+  }
+  if (k === "mergegroups" || k === "merge") {
+    const g = cfg.mergeGroups ?? [];
+    return {
+      ok: true,
+      text: g.map((row) => row.join(",")).join(";"),
+    };
+  }
+  if (k === "linelayout") {
+    return { ok: true, text: String(cfg.lineLayout ?? "") };
   }
 
   return {

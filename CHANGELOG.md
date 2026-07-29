@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0
+
+### Release tooling + layout set
+- **`scripts/release.sh --tag`**: create annotated `vX.Y.Z`; with `--push` also
+  push tags to gitea + github.
+- **`set elementOrder` / `projectLineOrder` / `mergeGroups` / `lineLayout`**:
+  e.g. `elementOrder=project,context,usage,tools`,
+  `mergeGroups=context,usage;tools,agents` (or `none`).
+- **`scripts/smoke.sh`** + `npm run smoke`: version / info / doctor / get quick check.
+- `get` supports printing order lists as CSV.
+
 ## 1.1.0
 
 ### CLI — get + richer set + release

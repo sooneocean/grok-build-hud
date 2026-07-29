@@ -23,7 +23,7 @@ Grok 4.5 · AI FILM SPACE/0717 · ●
 | 语言 | 默认 **English**，可切简体中文 / 繁體 |
 
 仓库：http://172.238.15.154:3000/Redredchen01/grok-build-hud  
-插件名：`grok-build-hud` · **1.1.0**（版本见 [`plugin.json`](./plugin.json)）
+插件名：`grok-build-hud` · **1.2.0**（版本见 [`plugin.json`](./plugin.json)）
 
 > **说明：** 本项目由我们自行开发与维护，**不是** xAI / Grok Build 官方插件或官方功能。仅兼容 Grok 的插件安装机制（`plugin.json` 等），便于本地 `grok plugin install`。
 
@@ -404,8 +404,18 @@ grok-build-hud/               # Gitea 仓库目录名
 ### 发版（维护者）
 
 ```bash
-bash scripts/release.sh minor        # 测试 + commit，不推
-bash scripts/release.sh 1.2.0 --push # 指定版本并双推
+bash scripts/release.sh minor              # 测试 + commit
+bash scripts/release.sh 1.2.0 --push       # 双推 main
+bash scripts/release.sh patch --push --tag # 双推 + 打 vX.Y.Z 标签
+npm run smoke                              # 本机快速自检
+```
+
+布局非交互示例：
+
+```bash
+grok-hud set elementOrder=project,context,usage,tools
+grok-hud set mergeGroups=context,usage
+grok-hud get elementOrder
 ```
 
 ---

@@ -317,7 +317,7 @@ export const PRESET_MINIMAL: HudDisplayConfig = {
 const VALID_ELEMENTS = new Set<string>(DEFAULT_ELEMENT_ORDER);
 const VALID_SEGMENTS = new Set<string>(DEFAULT_PROJECT_LINE_ORDER);
 
-function sanitizeElementOrder(raw: unknown): HudElement[] | undefined {
+export function sanitizeElementOrder(raw: unknown): HudElement[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out: HudElement[] = [];
   for (const x of raw) {
@@ -328,7 +328,7 @@ function sanitizeElementOrder(raw: unknown): HudElement[] | undefined {
   return out.length ? out : undefined;
 }
 
-function sanitizeMergeGroups(raw: unknown): HudElement[][] | undefined {
+export function sanitizeMergeGroups(raw: unknown): HudElement[][] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const groups: HudElement[][] = [];
   for (const g of raw) {
@@ -344,7 +344,9 @@ function sanitizeMergeGroups(raw: unknown): HudElement[][] | undefined {
   return groups;
 }
 
-function sanitizeProjectLineOrder(raw: unknown): FirstLineSegment[] | undefined {
+export function sanitizeProjectLineOrder(
+  raw: unknown,
+): FirstLineSegment[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out: FirstLineSegment[] = [];
   for (const x of raw) {
@@ -357,6 +359,41 @@ function sanitizeProjectLineOrder(raw: unknown): FirstLineSegment[] | undefined 
     }
   }
   return out.length ? out : undefined;
+}
+
+/** Parse CLI list: `project,context,usage` → elements */
+export function parseElementOrderCsv(csv: string): HudElement[] | undefined {
+  const parts = csv
+    .split(/[,+\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return sanitizeElementOrder(parts);
+}
+
+/** Parse CLI list: `model,project,live` */
+export function parseProjectLineCsv(csv: string): FirstLineSegment[] | undefined {
+  const parts = csv
+    .split(/[,+\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return sanitizeProjectLineOrder(parts);
+}
+
+/**
+ * Parse merge groups: `context,usage;tools,agents`
+ * Also accepts `context+usage|tools+agents`
+ */
+export function parseMergeGroupsCsv(raw: string): HudElement[][] | undefined {
+  const groups = raw
+    .split(/[;|]/)
+    .map((g) =>
+      g
+        .split(/[,+\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean),
+    )
+    .filter((g) => g.length);
+  return sanitizeMergeGroups(groups);
 }
 
 export function configPath(grokHome = path.join(os.homedir(), ".grok")): string {

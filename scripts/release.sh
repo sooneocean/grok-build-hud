@@ -1,22 +1,27 @@
 #!/usr/bin/env bash
 # Release helper for grok-build-hud
 # Usage:
-#   bash scripts/release.sh 1.1.0           # bump + test + commit (no push)
-#   bash scripts/release.sh 1.1.0 --push    # also dual-push gitea+github
-#   bash scripts/release.sh patch|--minor|--major [--push]
+#   bash scripts/release.sh 1.2.0                 # bump + test + commit
+#   bash scripts/release.sh minor --push          # dual-push main
+#   bash scripts/release.sh patch --push --tag    # push + annotated tag vX.Y.Z
+#   bash scripts/release.sh patch|--minor|--major [--push] [--tag]
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 PUSH=0
+TAG=0
 ARG="${1:-}"
 if [[ -z "$ARG" ]]; then
-  echo "usage: bash scripts/release.sh <version|patch|minor|major> [--push]" >&2
+  echo "usage: bash scripts/release.sh <version|patch|minor|major> [--push] [--tag]" >&2
   exit 1
 fi
 shift || true
 for a in "$@"; do
-  if [[ "$a" == "--push" ]]; then PUSH=1; fi
+  case "$a" in
+    --push) PUSH=1 ;;
+    --tag) TAG=1 ;;
+  esac
 done
 
 CUR="$(node -p "require('./package.json').version")"
@@ -51,21 +56,9 @@ for (const f of ['package.json','plugin.json']) {
 }
 " "$NEW"
 
-# 2) ensure CHANGELOG has heading (prepend if missing)
+# 2) ensure CHANGELOG has heading
 if ! grep -q "^## ${NEW}$" CHANGELOG.md 2>/dev/null; then
   tmp="$(mktemp)"
-  {
-    echo "# Changelog"
-    echo ""
-    echo "## ${NEW}"
-    echo ""
-    echo "### Release"
-    echo "- Version bump to ${NEW}."
-    echo ""
-    # drop first line if it was # Changelog
-    tail -n +2 CHANGELOG.md | sed '1{/^$/d;}' 
-  } >"$tmp"
-  # If original started with # Changelog, rebuild cleaner
   {
     echo "# Changelog"
     echo ""
@@ -86,19 +79,32 @@ npm test
 
 # 4) commit
 git add package.json plugin.json CHANGELOG.md
-# include any other dirty if release-only — keep scoped
 if git diff --cached --quiet; then
   echo "nothing to commit (version already ${NEW}?)"
 else
   git commit -m "Release v${NEW}"
 fi
 
-echo "==> v${NEW} ready (commit on main)"
+# 5) annotated tag (local)
+if [[ "$TAG" -eq 1 ]]; then
+  if git rev-parse "v${NEW}" >/dev/null 2>&1; then
+    echo "  tag v${NEW} already exists"
+  else
+    git tag -a "v${NEW}" -m "grok-build-hud v${NEW}"
+    echo "  tagged v${NEW}"
+  fi
+fi
+
+echo "==> v${NEW} ready (commit on main${TAG:+, tag v${NEW}})"
 if [[ "$PUSH" -eq 1 ]]; then
-  echo "==> push gitea + github"
+  echo "==> push gitea + github (main${TAG:+ + tags})"
   git push gitea main
   git push github main
+  if [[ "$TAG" -eq 1 ]]; then
+    git push gitea "v${NEW}" || git push gitea --tags
+    git push github "v${NEW}" || git push github --tags
+  fi
   echo "pushed v${NEW}"
 else
-  echo "not pushed (pass --push to dual-push remotes)"
+  echo "not pushed (pass --push; add --tag for annotated tag)"
 fi

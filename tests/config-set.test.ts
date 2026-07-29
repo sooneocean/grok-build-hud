@@ -63,4 +63,29 @@ describe("config-set", () => {
     const keys = getConfigValue(cfg, "--keys");
     assert.match(keys.text, /aesthetic/);
   });
+
+  it("set elementOrder and mergeGroups", () => {
+    let cfg = { ...PRESET_FULL, display: { ...PRESET_FULL.display } };
+    cfg = applyConfigSet(
+      cfg,
+      "elementOrder",
+      "project,context,usage,tools",
+    ).cfg;
+    assert.deepEqual(cfg.elementOrder, [
+      "project",
+      "context",
+      "usage",
+      "tools",
+    ]);
+    cfg = applyConfigSet(cfg, "mergeGroups", "context,usage").cfg;
+    assert.deepEqual(cfg.mergeGroups, [["context", "usage"]]);
+    cfg = applyConfigSet(cfg, "mergeGroups", "none").cfg;
+    assert.deepEqual(cfg.mergeGroups, []);
+    cfg = applyConfigSet(cfg, "projectLineOrder", "model,live,project").cfg;
+    assert.deepEqual(cfg.projectLineOrder, ["model", "live", "project"]);
+    assert.equal(
+      getConfigValue(cfg, "elementOrder").text,
+      "project,context,usage,tools",
+    );
+  });
 });

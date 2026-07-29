@@ -219,6 +219,13 @@ Reads local `~/.grok/sessions/**`, uses existing Grok auth for billing, writes u
 ```bash
 bash scripts/release.sh minor
 bash scripts/release.sh 1.2.0 --push
+bash scripts/release.sh patch --push --tag   # annotated vX.Y.Z
+npm run smoke
+```
+
+```bash
+grok-hud set elementOrder=project,context,usage,tools
+grok-hud set mergeGroups=context,usage
 ```
 
 Upgrade in place (keeps your `config.json` aesthetic):

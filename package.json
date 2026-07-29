@@ -1,6 +1,6 @@
 {
   "name": "grok-build-hud",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "第三方 Grok Build 状态条（非 xAI 官方）：同窗口上下文/配额/token/工具；plugin + CLI + tmux HUD",
   "type": "module",
   "main": "dist/src/index.js",
@@ -34,7 +34,7 @@
     "setup": "bash scripts/install.sh",
     "plugin:validate": "grok plugin validate .",
     "release": "bash scripts/release.sh",
-    "release:push": "bash scripts/release.sh"
+    "smoke": "bash scripts/smoke.sh"
   },
   "engines": {
     "node": ">=18"
