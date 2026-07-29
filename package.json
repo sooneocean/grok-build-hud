@@ -1,6 +1,6 @@
 {
   "name": "grok-build-hud",
-  "version": "0.3.15",
+  "version": "0.4.0",
   "description": "第三方 Grok Build 状态条（非 xAI 官方）：同窗口上下文/配额/token/工具；plugin + CLI + tmux HUD",
   "type": "module",
   "main": "dist/src/index.js",

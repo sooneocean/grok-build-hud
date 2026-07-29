@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+
+### Architecture (Phase A)
+- **Single compose pipeline**: plain multi-line HUD text now comes from
+  `src/render/compose.ts`. `formatStatusBlock` and CLI `renderHud` share it
+  (tmux still applies its own width-adaptive coloring adapter).
+- **Visual width helpers** (`src/render/width.ts`): CJK-aware cell width and
+  truncation foundation for Phase B label-align / elementOrder.
+- Live/stale labels in the plain status block follow i18n (`在线`/`闲置`).
+
+### Tests
+- `compose.test.ts`: compose ≡ formatStatusBlock; width unit tests.
+
 ## 0.3.15
 
 ### Fixes

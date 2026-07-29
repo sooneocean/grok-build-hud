@@ -60,6 +60,8 @@ export {
   parseEventsLines,
   estimateContextFromSessionDir,
 } from "./events.js";
+export { composeHudLines, composeHudText } from "./render/compose.js";
+export { visualLen, truncateVisible } from "./render/width.js";
 export { parseUpdatesLines, formatToolLine } from "./activity.js";
 export { normalizeBillingPayload } from "./billing.js";
 export {

@@ -1,13 +1,14 @@
+/**
+ * CLI / watch plain HUD rendering.
+ * Canonical multi-line layout lives in render/compose.ts — this file only
+ * applies optional ANSI color and thin tmux one-liners.
+ */
+import { projectLabel, renderBar } from "./bar.js";
+import { loadHudConfig, type HudDisplayConfig } from "./hud-config.js";
 import {
-  formatDuration,
-  formatTokenCount,
-  projectLabel,
-  renderBar,
-} from "./bar.js";
-import { formatToolLine } from "./activity.js";
-import { loadHudConfig } from "./hud-config.js";
-import { stringsFromConfig } from "./i18n.js";
-import { formatTokenBreakdownLine } from "./token-usage.js";
+  composeHudText,
+  displayModel,
+} from "./render/compose.js";
 import type {
   RenderOptions,
   SessionSnapshot,
@@ -22,8 +23,6 @@ const ANSI = {
   yellow: "\x1b[33m",
   red: "\x1b[31m",
   cyan: "\x1b[36m",
-  magenta: "\x1b[35m",
-  blue: "\x1b[34m",
 };
 
 function colorize(
@@ -35,15 +34,29 @@ function colorize(
   return `${color}${text}${ANSI.reset}`;
 }
 
-function severityColor(
-  percent: number,
-  opts: RenderOptions,
-): string {
+function severityColor(percent: number, opts: RenderOptions): string {
   if (percent >= opts.criticalThreshold) return ANSI.red;
   if (percent >= opts.warningThreshold) return ANSI.yellow;
   return ANSI.green;
 }
 
+function cfgFromRenderOpts(opts: RenderOptions): HudDisplayConfig {
+  const base = loadHudConfig();
+  return {
+    ...base,
+    pathLevels: (opts.pathLevels === 1 || opts.pathLevels === 2 || opts.pathLevels === 3
+      ? opts.pathLevels
+      : base.pathLevels) as 1 | 2 | 3,
+    lineLayout: opts.compact ? "compact" : base.lineLayout,
+    warningThreshold: opts.warningThreshold,
+    criticalThreshold: opts.criticalThreshold,
+  };
+}
+
+/**
+ * Multi-line HUD text for CLI --once / watch.
+ * Uses the same compose pipeline as status.txt (single source of truth).
+ */
 export function renderHud(
   session: SessionSnapshot,
   usage: UsageSnapshot | null,
@@ -62,105 +75,27 @@ export function renderHud(
     return renderTmux(session, usage, options);
   }
 
-  const c = options.color;
-  const L = stringsFromConfig(loadHudConfig());
-  const model = colorize(displayModel(session.model), ANSI.cyan, c);
-  const project = projectLabel(session.cwd, options.pathLevels);
-  const branchPart = session.branch
-    ? ` git:(${session.branch}${session.gitDirty ? "*" : ""})`
-    : "";
-  const live = session.live
-    ? colorize(`● ${L.live}`, ANSI.green, c)
-    : colorize(`○ ${L.stale}`, ANSI.dim, c);
+  const cfg = cfgFromRenderOpts(options);
+  const plain = composeHudText(session, usage, cfg);
+  if (!options.color) return plain;
 
-  const line1 = `[${model}] │ ${project}${branchPart} │ ${live}`;
-
-  const pct = Math.round(session.contextPercent);
-  const barColor = severityColor(session.contextPercent, options);
-  const bar = colorize(renderBar(session.contextPercent), barColor, c);
-  const tokenPart =
-    session.contextWindowTokens > 0
-      ? ` (${formatTokenCount(session.contextTokensUsed)}/${formatTokenCount(session.contextWindowTokens)})`
-      : "";
-  const ctxLabel = colorize(L.ctx, ANSI.bold, c);
-  const meta: string[] = [];
-  if (session.durationSeconds > 0) {
-    meta.push(formatDuration(session.durationSeconds));
-  }
-  if (session.turnCount > 0) meta.push(`${L.turn}${session.turnCount}`);
-  if (session.toolCallCount > 0) meta.push(`${L.tools}${session.toolCallCount}`);
-  const tokLine = session.lastTurnTokens
-    ? formatTokenBreakdownLine(session.lastTurnTokens, { mode: "exact" })
-    : "";
-  const line2 = `${ctxLabel} ${bar} ${pct}%${tokenPart}${tokLine ? ` │ ${tokLine}` : ""}${meta.length ? ` │ ${meta.join(" │ ")}` : ""}`;
-
-  const lines = [line1, line2];
-  if (
-    session.sessionTokens &&
-    session.lastTurnTokens &&
-    (session.sessionTokens.inputTokens !== session.lastTurnTokens.inputTokens ||
-      session.sessionTokens.outputTokens !==
-        session.lastTurnTokens.outputTokens)
-  ) {
-    lines.push(
-      formatTokenBreakdownLine(session.sessionTokens, {
-        mode: "exact",
-        prefix: "ΣTOK",
-      }),
-    );
-  }
-
-  const usageLine = formatUsageLine(usage, options, L.use);
-  if (usageLine) lines.push(usageLine);
-
-  const toolLine = formatToolLine(session.tools);
-  if (toolLine) {
-    lines.push(toolLine);
-  }
-
-  if (session.agents?.length) {
-    const a = session.agents[session.agents.length - 1]!;
-    lines.push(
-      `◎ ${a.title ?? "agent"}${a.detail ? `: ${a.detail}` : ""}`,
-    );
-  }
-
-  if (options.compact) {
-    return lines.slice(0, 2).join(" · ");
-  }
-
-  return lines.join("\n");
-}
-
-function displayModel(model: string): string {
-  if (!model || model === "unknown") return "Grok";
-  // grok-4.5 -> Grok 4.5
-  return model
-    .replace(/^grok-/i, "Grok ")
-    .replace(/-/g, " ");
-}
-
-function formatUsageLine(
-  usage: UsageSnapshot | null | undefined,
-  opts: RenderOptions,
-  useLabel = "use",
-): string {
-  if (!usage) {
-    return `${useLabel}   ${colorize("—", ANSI.dim, opts.color)} unavailable`;
-  }
-  if (!usage.available) {
-    return `${useLabel}   ${colorize("—", ANSI.dim, opts.color)} ${usage.message ?? "unavailable"}`;
-  }
-  const pct = usage.percent ?? 0;
-  const bar = colorize(renderBar(pct), severityColor(pct, opts), opts.color);
-  const nums =
-    usage.used != null && usage.limit != null
-      ? ` · ${formatTokenCount(usage.used)}/${formatTokenCount(usage.limit)}`
-      : "";
-  const period = usage.period ? ` (${usage.period})` : "";
-  const reset = usage.resetsIn ? ` · ${usage.resetsIn}` : "";
-  const prod = usage.message ? ` · ${usage.message}` : "";
-  return `${useLabel}   ${bar} ${Math.round(pct)}%${period}${nums}${reset}${prod}`;
+  // Light ANSI: colour context % on the metrics line when present
+  return plain
+    .split("\n")
+    .map((line, i) => {
+      if (i !== 1) return line;
+      const pct = Math.round(session.contextPercent);
+      const bar = renderBar(session.contextPercent);
+      const coloredBar = colorize(bar, severityColor(session.contextPercent, options), true);
+      if (line.includes(bar)) {
+        return line.replace(bar, coloredBar).replace(
+          `${pct}%`,
+          colorize(`${pct}%`, severityColor(session.contextPercent, options), true),
+        );
+      }
+      return line;
+    })
+    .join("\n");
 }
 
 export function renderTmux(
