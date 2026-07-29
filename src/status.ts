@@ -176,10 +176,11 @@ export function formatStatusBlock(
   if (session.reasoningEffort) l1.push(`effort:${session.reasoningEffort}`);
   lines.push(l1.join(" │ "));
 
-  // Line 2 — Context + Usage
+  // Line 2 — Context + Usage (short labels follow language: 窗/额 or ctx/use)
+  const L = stringsFromConfig(cfg);
   const pct = Math.round(session.contextPercent);
   const cBar = d.showContextBar ? renderBar(session.contextPercent) + " " : "";
-  const ctxPart = `Context ${cBar}${contextValueText(session, d.contextValue)}`;
+  const ctxPart = `${L.ctx} ${cBar}${contextValueText(session, d.contextValue)}`;
 
   let usagePart = "";
   if (d.showUsage) {
@@ -189,26 +190,25 @@ export function formatStatusBlock(
         usage.used != null && usage.limit != null
           ? ` ${formatTokenCount(usage.used)}/${formatTokenCount(usage.limit)}`
           : "";
-      const reset = usage.resetsIn ? ` · ${usage.resetsIn} left` : "";
-      usagePart = `Usage ${uBar}${Math.round(usage.percent)}%${usage.period ? ` (${usage.period})` : ""}${abs}${reset}`;
+      const reset = usage.resetsIn ? ` · ${usage.resetsIn} ${L.left}` : "";
+      usagePart = `${L.use} ${uBar}${Math.round(usage.percent)}%${usage.period ? ` (${usage.period})` : ""}${abs}${reset}`;
     } else {
-      usagePart = `Usage — ${usage?.message ?? "n/a"}`;
+      usagePart = `${L.use} — ${usage?.message ?? "n/a"}`;
     }
   }
 
   const meta: string[] = [];
   if (d.showSessionTime && session.durationSeconds > 0) {
-    meta.push(`Time ${formatDuration(session.durationSeconds)}`);
+    meta.push(`${formatDuration(session.durationSeconds)}`);
   }
   if (d.showTurns && session.turnCount > 0) {
-    meta.push(`Turns ${session.turnCount}`);
+    meta.push(`${L.turn}${session.turnCount}`);
   }
   if (d.showTools && session.toolCallCount > 0) {
-    meta.push(`Tools ${session.toolCallCount}`);
+    meta.push(`${L.tools}${session.toolCallCount}`);
   }
   if (d.showErrors && (session.errorCount > 0 || session.toolFailureCount > 0)) {
-    const Ls = stringsFromConfig(cfg);
-    meta.push(`${Ls.err} ${session.errorCount || session.toolFailureCount}`);
+    meta.push(`${L.err} ${session.errorCount || session.toolFailureCount}`);
   }
   if (
     d.showDiffStats &&

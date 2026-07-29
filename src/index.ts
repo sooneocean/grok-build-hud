@@ -55,6 +55,11 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 export { contextPercentFromSignals, renderBar, formatTokenCount } from "./bar.js";
+export {
+  parseEventsFile,
+  parseEventsLines,
+  estimateContextFromSessionDir,
+} from "./events.js";
 export { parseUpdatesLines, formatToolLine } from "./activity.js";
 export { normalizeBillingPayload } from "./billing.js";
 export {

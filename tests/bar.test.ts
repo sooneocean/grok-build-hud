@@ -36,6 +36,9 @@ describe("bar", () => {
     assert.equal(renderBar(37, 10).length, 10);
     assert.match(formatTokenCount(190000), /190k|190\.0k/);
     assert.equal(formatDuration(4620), "1h 17m");
-    assert.equal(projectLabel("/Users/dex/demo/CoachFlow", 2), "demo/CoachFlow");
+    // Under $HOME → ~/… (clearer than bare "Users/dex")
+    const home = process.env.HOME || "/Users/dex";
+    assert.equal(projectLabel(`${home}/demo/CoachFlow`, 2), "~/demo/CoachFlow");
+    assert.equal(projectLabel("/opt/other/app", 2), "other/app");
   });
 });

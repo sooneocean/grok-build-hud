@@ -34,7 +34,7 @@ describe("cli", () => {
     );
     assert.equal(code, 0);
     const text = chunks.join("\n");
-    assert.match(text, /Context/);
+    assert.match(text, /ctx|Context|窗|37%/);
     assert.match(text, /37%/);
     assert.match(text, /190k|500k/);
   });

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.15
+
+### Fixes
+- **Context stuck at 0%** when Grok never writes `signals.json` (common mid-turn
+  and on some long sessions): estimate context from `chat_history` /
+  `prompt_context` / `system_prompt` sizes; pull turn/tool counts from
+  `events.jsonl` and take the max with signals so mid-turn stays fresh.
+- **Activity row noise**: stop treating `agent_message_chunk` /
+  `agent_thought_chunk` as agents; only show real `subagent_spawned` /
+  `subagent_finished` workers.
+- **Project label**: paths under `$HOME` show as `~/…` instead of `Users/dex`.
+- **Duration**: fall back to summary `created_at` when signals duration is 0.
+- Tests: pin `maxWidth` in status-parity so narrow tmux panes don’t flake.
+
 ## 0.3.14
 
 ### Config

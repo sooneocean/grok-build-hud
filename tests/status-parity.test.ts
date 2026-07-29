@@ -33,9 +33,9 @@ describe("Grok HUD multi-line status", () => {
       PRESET_FULL,
     );
     assert.match(text, /\[Grok 4\.5\]/);
-    assert.match(text, /Context/);
+    assert.match(text, /ctx|Context|窗/);
     assert.match(text, /37%/);
-    assert.match(text, /Usage/);
+    assert.match(text, /use|Usage|额/);
     assert.match(text, /23%/);
     // multi-line
     assert.ok(text.split("\n").length >= 2);
@@ -56,7 +56,7 @@ describe("Grok HUD multi-line status", () => {
     );
     assert.equal(lines.length, 3);
     assert.match(lines[0]!, /Grok 4\.5|CoachFlow/);
-    assert.match(lines[1]!, /Context|Usage|22%|37%/);
+    assert.match(lines[1]!, /ctx|Context|窗|use|Usage|额|22%|37%/);
   });
 
   it("writeStatusFiles emits tmux-lines.txt", () => {
@@ -70,14 +70,16 @@ describe("Grok HUD multi-line status", () => {
     );
     // session needs to be written via writeStatusFiles with grokHome=tmp
     // but session is loaded from fixture; OK
+    // Pin width so tests don't collapse to 1 line when run inside a narrow tmux pane
     const r = writeStatusFiles(
       snap,
       { available: true, percent: 20, period: "weekly" },
       tmp,
+      { maxWidth: 120 },
     );
     assert.ok(fs.existsSync(path.join(tmp, "hud", "tmux-lines.txt")));
     assert.ok(r.tmuxLines.length >= 2);
-    assert.match(r.full, /Context/);
+    assert.match(r.full, /ctx|Context|窗/);
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 });

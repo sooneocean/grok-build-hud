@@ -3,6 +3,11 @@ import path from "node:path";
 import os from "node:os";
 import { contextPercentFromSignals } from "./bar.js";
 import { parseUpdatesFile } from "./activity.js";
+import {
+  durationFromSummary,
+  estimateContextFromSessionDir,
+  parseEventsFile,
+} from "./events.js";
 import { parseTokenUsageFile } from "./token-usage.js";
 import { readGitInfo } from "./git.js";
 import type {
@@ -238,6 +243,7 @@ export function loadSnapshotFromDir(
   // Require at least one of the core session files
   if (!fs.existsSync(signalsPath) && !fs.existsSync(summaryPath)) return null;
 
+  const hasSignalsFile = fs.existsSync(signalsPath);
   const signals =
     readJsonFile<SessionSignals>(signalsPath) ?? {};
   const summary =
@@ -264,13 +270,34 @@ export function loadSnapshotFromDir(
     summary?.current_model_id ||
     "unknown";
 
-  const percent = contextPercentFromSignals(signals);
-  const contextTokensUsed =
+  // events.jsonl: reliable mid-turn when signals.json is missing or stale
+  const eventsPath = path.join(sessionDir, "events.jsonl");
+  const events = parseEventsFile(eventsPath);
+
+  let percent = contextPercentFromSignals(signals);
+  let contextTokensUsed =
     typeof signals.contextTokensUsed === "number" ? signals.contextTokensUsed : 0;
-  const contextWindowTokens =
+  let contextWindowTokens =
     typeof signals.contextWindowTokens === "number"
       ? signals.contextWindowTokens
       : 0;
+
+  // No signals (or zeroed context) → estimate from local session files so
+  // the bar is not stuck at 0% during the first turn / broken writers.
+  if (
+    (!hasSignalsFile || (contextTokensUsed <= 0 && percent <= 0)) &&
+    sessionDir
+  ) {
+    const est = estimateContextFromSessionDir(
+      sessionDir,
+      contextWindowTokens > 0 ? contextWindowTokens : 500_000,
+    );
+    if (est.contextTokensUsed > 0) {
+      contextTokensUsed = est.contextTokensUsed;
+      contextWindowTokens = est.contextWindowTokens;
+      percent = est.contextPercent;
+    }
+  }
 
   const updatesPath = path.join(sessionDir, "updates.jsonl");
   const activity = parseUpdatesFile(updatesPath);
@@ -285,9 +312,35 @@ export function loadSnapshotFromDir(
       count: 1,
     }));
   }
+  if (!tools.length && events.toolsUsed.length) {
+    tools = events.toolsUsed.map((name, i) => ({
+      id: `ev-${i}`,
+      name,
+      status: "completed" as const,
+      count: 1,
+    }));
+  }
 
   const git = cwd ? readGitInfo(cwd) : { dirty: false };
   const branch = git.branch ?? summary?.head_branch;
+
+  const sigTurn =
+    typeof signals.turnCount === "number" ? signals.turnCount : 0;
+  const sigTools =
+    typeof signals.toolCallCount === "number" ? signals.toolCallCount : 0;
+  const sigFail =
+    typeof signals.toolFailureCount === "number" ? signals.toolFailureCount : 0;
+  // Prefer the higher of signals vs events (events stay fresh mid-turn)
+  const turnCount = Math.max(sigTurn, events.turnCount);
+  const toolCallCount = Math.max(sigTools, events.toolCallCount);
+  const toolFailureCount = Math.max(sigFail, events.toolFailureCount);
+
+  const sigDuration =
+    typeof signals.sessionDurationSeconds === "number"
+      ? signals.sessionDurationSeconds
+      : 0;
+  const durationSeconds =
+    sigDuration > 0 ? sigDuration : durationFromSummary(summary);
 
   return {
     sessionId,
@@ -304,18 +357,13 @@ export function loadSnapshotFromDir(
     contextPercent: percent,
     contextTokensUsed,
     contextWindowTokens,
-    turnCount: typeof signals.turnCount === "number" ? signals.turnCount : 0,
+    turnCount,
     userMessageCount:
       typeof signals.userMessageCount === "number" ? signals.userMessageCount : 0,
-    toolCallCount:
-      typeof signals.toolCallCount === "number" ? signals.toolCallCount : 0,
-    toolFailureCount:
-      typeof signals.toolFailureCount === "number" ? signals.toolFailureCount : 0,
+    toolCallCount,
+    toolFailureCount,
     errorCount: typeof signals.errorCount === "number" ? signals.errorCount : 0,
-    durationSeconds:
-      typeof signals.sessionDurationSeconds === "number"
-        ? signals.sessionDurationSeconds
-        : 0,
+    durationSeconds,
     agentLinesAdded:
       typeof signals.agentLinesAdded === "number" ? signals.agentLinesAdded : 0,
     agentLinesRemoved:

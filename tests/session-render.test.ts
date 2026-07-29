@@ -39,10 +39,10 @@ describe("session + render", () => {
       message: "GrokBuild 9%",
     };
     const text = renderHud(snap, usage, { color: false });
-    assert.match(text, /Context/);
+    assert.match(text, /ctx|Context|窗/);
     assert.match(text, /37%/);
     assert.match(text, /190k\/500k|190\.0k\/500k/);
-    assert.match(text, /Usage|Quota|22%/);
+    assert.match(text, /use|Usage|Quota|额|22%/);
     assert.match(text, /22%/);
     assert.match(text, /Grok|grok/i);
     assert.match(text, /CoachFlow/);

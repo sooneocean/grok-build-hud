@@ -65,7 +65,20 @@ export function formatDuration(seconds: number): string {
 
 export function projectLabel(cwd: string, levels = 2): string {
   if (!cwd) return "unknown";
-  const parts = cwd.replace(/\\/g, "/").split("/").filter(Boolean);
+  const home = process.env.HOME?.replace(/\\/g, "/") || "";
+  let normalized = cwd.replace(/\\/g, "/");
+  // Show ~ for home root and paths under home (clearer than "Users/dex")
+  if (home && (normalized === home || normalized.startsWith(home + "/"))) {
+    const rest = normalized.slice(home.length).replace(/^\//, "");
+    if (!rest) return "~";
+    const parts = rest.split("/").filter(Boolean);
+    const take = Math.max(1, levels);
+    const tail = parts.slice(-take).join("/");
+    // Under home with only one remaining segment: ~/foo
+    if (parts.length <= take) return `~/${tail}`;
+    return tail;
+  }
+  const parts = normalized.split("/").filter(Boolean);
   if (parts.length === 0) return cwd;
   const take = Math.max(1, levels);
   return parts.slice(-take).join("/");

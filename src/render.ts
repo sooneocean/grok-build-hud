@@ -5,6 +5,8 @@ import {
   renderBar,
 } from "./bar.js";
 import { formatToolLine } from "./activity.js";
+import { loadHudConfig } from "./hud-config.js";
+import { stringsFromConfig } from "./i18n.js";
 import { formatTokenBreakdownLine } from "./token-usage.js";
 import type {
   RenderOptions,
@@ -61,14 +63,15 @@ export function renderHud(
   }
 
   const c = options.color;
+  const L = stringsFromConfig(loadHudConfig());
   const model = colorize(displayModel(session.model), ANSI.cyan, c);
   const project = projectLabel(session.cwd, options.pathLevels);
   const branchPart = session.branch
     ? ` git:(${session.branch}${session.gitDirty ? "*" : ""})`
     : "";
   const live = session.live
-    ? colorize("● live", ANSI.green, c)
-    : colorize("○ stale", ANSI.dim, c);
+    ? colorize(`● ${L.live}`, ANSI.green, c)
+    : colorize(`○ ${L.stale}`, ANSI.dim, c);
 
   const line1 = `[${model}] │ ${project}${branchPart} │ ${live}`;
 
@@ -79,13 +82,13 @@ export function renderHud(
     session.contextWindowTokens > 0
       ? ` (${formatTokenCount(session.contextTokensUsed)}/${formatTokenCount(session.contextWindowTokens)})`
       : "";
-  const ctxLabel = colorize("Context", ANSI.bold, c);
+  const ctxLabel = colorize(L.ctx, ANSI.bold, c);
   const meta: string[] = [];
   if (session.durationSeconds > 0) {
-    meta.push(`Time ${formatDuration(session.durationSeconds)}`);
+    meta.push(formatDuration(session.durationSeconds));
   }
-  if (session.turnCount > 0) meta.push(`Turns ${session.turnCount}`);
-  if (session.toolCallCount > 0) meta.push(`Tools ${session.toolCallCount}`);
+  if (session.turnCount > 0) meta.push(`${L.turn}${session.turnCount}`);
+  if (session.toolCallCount > 0) meta.push(`${L.tools}${session.toolCallCount}`);
   const tokLine = session.lastTurnTokens
     ? formatTokenBreakdownLine(session.lastTurnTokens, { mode: "exact" })
     : "";
@@ -107,7 +110,7 @@ export function renderHud(
     );
   }
 
-  const usageLine = formatUsageLine(usage, options);
+  const usageLine = formatUsageLine(usage, options, L.use);
   if (usageLine) lines.push(usageLine);
 
   const toolLine = formatToolLine(session.tools);
@@ -118,7 +121,7 @@ export function renderHud(
   if (session.agents?.length) {
     const a = session.agents[session.agents.length - 1]!;
     lines.push(
-      `◎ agent ${a.title ?? "agent"}${a.detail ? `: ${a.detail}` : ""}`,
+      `◎ ${a.title ?? "agent"}${a.detail ? `: ${a.detail}` : ""}`,
     );
   }
 
@@ -140,23 +143,24 @@ function displayModel(model: string): string {
 function formatUsageLine(
   usage: UsageSnapshot | null | undefined,
   opts: RenderOptions,
+  useLabel = "use",
 ): string {
   if (!usage) {
-    return `Quota   ${colorize("—", ANSI.dim, opts.color)} unavailable`;
+    return `${useLabel}   ${colorize("—", ANSI.dim, opts.color)} unavailable`;
   }
   if (!usage.available) {
-    return `Quota   ${colorize("—", ANSI.dim, opts.color)} ${usage.message ?? "unavailable"}`;
+    return `${useLabel}   ${colorize("—", ANSI.dim, opts.color)} ${usage.message ?? "unavailable"}`;
   }
   const pct = usage.percent ?? 0;
   const bar = colorize(renderBar(pct), severityColor(pct, opts), opts.color);
   const nums =
     usage.used != null && usage.limit != null
-      ? ` · month ${formatTokenCount(usage.used)}/${formatTokenCount(usage.limit)}`
+      ? ` · ${formatTokenCount(usage.used)}/${formatTokenCount(usage.limit)}`
       : "";
   const period = usage.period ? ` (${usage.period})` : "";
-  const reset = usage.resetsIn ? ` · resets ${usage.resetsIn}` : "";
+  const reset = usage.resetsIn ? ` · ${usage.resetsIn}` : "";
   const prod = usage.message ? ` · ${usage.message}` : "";
-  return `Quota   ${bar} ${Math.round(pct)}%${period}${nums}${reset}${prod}`;
+  return `${useLabel}   ${bar} ${Math.round(pct)}%${period}${nums}${reset}${prod}`;
 }
 
 export function renderTmux(

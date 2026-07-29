@@ -114,26 +114,53 @@ export function parseUpdatesLines(lines: string[]): {
       continue;
     }
 
-    if (
-      kind === "agent_message_chunk" ||
-      kind === "agent_thought_chunk" ||
-      kind.includes("agent")
-    ) {
+    // Real subagents only — agent_message_chunk / agent_thought_chunk are
+    // the main model streaming, not workers (they flooded the activity row).
+    if (kind === "subagent_spawned") {
+      const id =
+        (update.subagent_id as string | undefined) ??
+        (update.child_session_id as string | undefined) ??
+        (update.agentId as string | undefined);
       const title =
-        (update.title as string | undefined) ??
+        (update.description as string | undefined) ??
+        (update.subagent_type as string | undefined) ??
         (update.agentType as string | undefined) ??
-        (update.name as string | undefined);
-      if (title || kind === "agent_message_chunk") {
-        agents.push({
-          id: (update.agentId as string | undefined) ?? (update.toolCallId as string | undefined),
-          title: title ?? kind,
-          status: (update.status as string | undefined) ?? "active",
-          detail:
-            typeof update.content === "string"
-              ? update.content.slice(0, 80)
-              : undefined,
-        });
-      }
+        "subagent";
+      agents.push({
+        id,
+        title: String(title),
+        status: "active",
+        detail:
+          typeof update.subagent_type === "string"
+            ? update.subagent_type
+            : undefined,
+      });
+      continue;
+    }
+    if (kind === "subagent_finished") {
+      const id =
+        (update.subagent_id as string | undefined) ??
+        (update.child_session_id as string | undefined);
+      const status = String(update.status ?? "completed");
+      const title =
+        (update.description as string | undefined) ??
+        (update.subagent_type as string | undefined) ??
+        "subagent";
+      // Update matching active entry or append finished
+      const existing = id
+        ? agents.findIndex((a) => a.id === id)
+        : -1;
+      const item = {
+        id,
+        title: String(title),
+        status,
+        detail:
+          typeof update.error === "string"
+            ? update.error.slice(0, 80)
+            : undefined,
+      };
+      if (existing >= 0) agents[existing] = item;
+      else agents.push(item);
     }
   }
 

@@ -7,3 +7,4 @@
 {"timestamp":1006,"method":"session/update","params":{"sessionId":"fixture-session-001","update":{"sessionUpdate":"tool_call","toolCallId":"call-4","title":"read_file","rawInput":{"target_file":"/Users/dex/demo/CoachFlow/src/admin.ts"}}}}
 {"timestamp":1007,"method":"session/update","params":{"sessionId":"fixture-session-001","update":{"sessionUpdate":"tool_call_update","toolCallId":"call-4","kind":"read","title":"Read admin.ts"}}}
 {"timestamp":1008,"method":"session/update","params":{"sessionId":"fixture-session-001","update":{"sessionUpdate":"agent_thought_chunk","title":"explore","agentId":"agent-1"}}}
+{"timestamp":1009,"method":"session/update","params":{"sessionId":"fixture-session-001","update":{"sessionUpdate":"subagent_spawned","subagent_id":"sub-1","subagent_type":"scout","description":"Explore project status","child_session_id":"sub-1"}}}
