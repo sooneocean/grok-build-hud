@@ -11,6 +11,8 @@ grok-build-hud --once --follow-active --no-color
 
 # aesthetic + data priority (D5)
 grok-hud info
+# local health check (0.9)
+grok-hud doctor
 ```
 
 Prints the multi-line status (context, usage, tokens, tools) once.

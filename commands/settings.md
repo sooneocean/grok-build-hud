@@ -27,8 +27,11 @@ grok-build-hud --settings
 | `b` | Compaction count (opt-in) |
 | `c` | Output speed tok/s (opt-in) |
 | `d` | Git ↑↓ ahead/behind |
+| `e` | `autoDenseBelow` toggle (0 ↔ 60) — narrow panes → dense chip |
 | `0` | Save & exit |
 | `q` | Quit without save |
+
+Preview (`8`) uses a **live** session when one exists (label `live`); otherwise a fixture.
 
 ## Language shortcuts
 

@@ -112,6 +112,11 @@ export interface HudDisplayConfig {
   externalUsageWritePath?: string;
   /** Sidecar max age ms (default 300000). */
   externalUsageFreshnessMs?: number;
+  /**
+   * When terminal width (cols) is below this, render dense chip for this paint.
+   * 0 = disabled. codex/dense defaults to 60 if unset in config file.
+   */
+  autoDenseBelow?: number;
   display: {
     showModel: boolean;
     showProject: boolean;
@@ -199,6 +204,7 @@ export const PRESET_FULL: HudDisplayConfig = {
   tokenRevealAtContextPercent: 0,
   timeFormat: "relative",
   usageEmphasisThreshold: 0,
+  autoDenseBelow: 0,
   display: {
     showModel: true,
     showProject: true,
@@ -436,6 +442,12 @@ export function loadHudConfig(
           : calmAesthetic
             ? 80
             : (base.usageEmphasisThreshold ?? 0),
+      autoDenseBelow:
+        typeof raw.autoDenseBelow === "number"
+          ? raw.autoDenseBelow
+          : calmAesthetic
+            ? (base.autoDenseBelow ?? 60)
+            : (base.autoDenseBelow ?? 0),
       externalUsagePath: raw.externalUsagePath ?? base.externalUsagePath,
       externalUsageWritePath:
         raw.externalUsageWritePath ?? base.externalUsageWritePath,
@@ -616,6 +628,7 @@ export function applyAesthetic(
       tokenRevealAtContextPercent: 85,
       timeFormat: "relative",
       usageEmphasisThreshold: 80,
+      autoDenseBelow: 60,
       alignLabels: false,
       projectLineOrder: ["model", "project", "live"],
       elementOrder: ["project", "context", "usage", "meta", "tools"],
@@ -656,6 +669,7 @@ export function applyAesthetic(
     tokenRevealAtContextPercent: 70,
     timeFormat: "relative",
     usageEmphasisThreshold: 80,
+    autoDenseBelow: 60,
     alignLabels: true,
     projectLineOrder: ["model", "project", "live"],
     elementOrder: [

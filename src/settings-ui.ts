@@ -19,9 +19,14 @@ import {
   type HudLang,
 } from "./i18n.js";
 import { previewHud } from "./render/compose.js";
-import { defaultGrokHome, emptySessionSnapshot } from "./session.js";
+import {
+  defaultGrokHome,
+  emptySessionSnapshot,
+  pickFromActiveSessions,
+  pickBestSession,
+} from "./session.js";
 import { ensureFollowMode } from "./theme.js";
-import type { UsageSnapshot } from "./types.js";
+import type { SessionSnapshot, UsageSnapshot } from "./types.js";
 
 export interface SettingsUiOptions {
   grokHome?: string;
@@ -103,6 +108,10 @@ function printMenu(cfg: HudDisplayConfig, out: (s: string) => void): void {
       cfg.display.showGitAheadBehind !== false ? s.on : s.off
     }]`,
   );
+  const ad = cfg.autoDenseBelow ?? 0;
+  out(
+    `│  e) autoDense <N cols     [${ad > 0 ? `<${ad}` : s.off}]`,
+  );
   out(`│`);
   out(`│  0) ${s.saveExit}`);
   out(`│  q) ${s.quitNoSave}`);
@@ -127,8 +136,8 @@ async function pickAesthetic(
   return cfg.aesthetic ?? "classic";
 }
 
-function samplePreview(cfg: HudDisplayConfig): string {
-  const snap = emptySessionSnapshot({
+function fixturePreviewSession(): SessionSnapshot {
+  return emptySessionSnapshot({
     sessionId: "preview",
     model: "grok-4.5",
     cwd: "/Users/dex/demo/CoachFlow",
@@ -177,6 +186,19 @@ function samplePreview(cfg: HudDisplayConfig): string {
       cacheHitPct: 83,
     },
   });
+}
+
+/** Prefer live session for settings preview; fall back to fixture. */
+export function samplePreview(
+  cfg: HudDisplayConfig,
+  grokHome = defaultGrokHome(),
+): { text: string; source: "live" | "fixture" } {
+  let snap: SessionSnapshot | null = null;
+  try {
+    snap = pickFromActiveSessions(grokHome) ?? pickBestSession({ grokHome });
+  } catch {
+    snap = null;
+  }
   const usage: UsageSnapshot = {
     available: true,
     percent: 24,
@@ -186,7 +208,25 @@ function samplePreview(cfg: HudDisplayConfig): string {
     resetsIn: "3h",
     message: "GrokBuild 12%",
   };
-  return previewHud(snap, usage, cfg);
+  if (snap && snap.sessionId && snap.sessionId !== "—") {
+    // Merge opt-in demo chips onto live when those flags are on (so toggle is visible)
+    const enriched: SessionSnapshot = {
+      ...snap,
+      gitFileStats:
+        snap.gitFileStats ??
+        (cfg.display.showGitFileStats
+          ? { modified: 1, added: 0, deleted: 0, untracked: 0 }
+          : undefined),
+      compactionCount:
+        snap.compactionCount ||
+        (cfg.display.showCompactions ? 1 : snap.compactionCount),
+      outputTokensPerSecond:
+        snap.outputTokensPerSecond ??
+        (cfg.display.showSpeed ? 32 : snap.outputTokensPerSecond),
+    };
+    return { text: previewHud(enriched, usage, cfg), source: "live" };
+  }
+  return { text: previewHud(fixturePreviewSession(), usage, cfg), source: "fixture" };
 }
 
 async function pickLanguage(
@@ -359,8 +399,9 @@ export async function runSettingsUi(
       }
       if (ans === "8" || ans === "preview" || ans === "p") {
         out("");
-        out(`  ── ${s.preview} ──`);
-        for (const line of samplePreview(cfg).split("\n")) {
+        const prev = samplePreview(cfg, grokHome);
+        out(`  ── ${s.preview} (${prev.source}) ──`);
+        for (const line of prev.text.split("\n")) {
           out(`  ${line}`);
         }
         out(`  ────────────`);
@@ -373,11 +414,25 @@ export async function runSettingsUi(
           cfg = applyAesthetic(next, cfg);
           dirty = true;
           out(`  → ${next}`);
-          out(`  ── ${s.preview} ──`);
-          for (const line of samplePreview(cfg).split("\n")) {
+          const prev = samplePreview(cfg, grokHome);
+          out(`  ── ${s.preview} (${prev.source}) ──`);
+          for (const line of prev.text.split("\n")) {
             out(`  ${line}`);
           }
         }
+        continue;
+      }
+      // e) auto dense below cols
+      if (ans === "e" || ans === "autodense" || ans === "dense-auto") {
+        const cur = cfg.autoDenseBelow ?? 0;
+        const next = cur > 0 ? 0 : 60;
+        cfg = { ...cfg, autoDenseBelow: next };
+        dirty = true;
+        out(
+          next > 0
+            ? `  autoDenseBelow → ${next} (narrow panes → dense chip)`
+            : `  autoDenseBelow → 0 (off)`,
+        );
         continue;
       }
       // Phase C opt-in chips (a–d)

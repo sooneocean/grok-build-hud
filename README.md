@@ -201,7 +201,8 @@ grok-hud-run
 ```bash
 grok-hud status
 grok-hud info                 # aesthetic + 可选芯片 + 数据优先级
-grok-hud settings             # 含 a/b/c/d 开 git/压缩/速度
+grok-hud doctor               # 本机自检（tmux / 认证 / daemon / 状态新鲜度）
+grok-hud settings             # 含 a/b/c/d 芯片 · e 窄窗自动 dense
 grok-hud lang zh|en|tw
 grok-build-hud --preset full|essential|minimal
 grok-build-hud --theme auto
@@ -314,9 +315,11 @@ grok-hud info              # 打印 aesthetic + 数据优先级
 | `showCompactions` | 本会话压缩次数（>0 才显） | `压2` |
 | `showSpeed` | 输出速度 | `42 tok/s` |
 | `showDiffStats` | agent 改行 Δ | `Δ +12/-3` |
+| `autoDenseBelow` | 窄于 N 列时本帧切 dense 芯片 | 默认 codex=60；0=关 |
 
 ```jsonc
 {
+  "autoDenseBelow": 60,
   "display": {
     "showGitFileStats": true,
     "showCompactions": true,

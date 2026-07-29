@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0
+
+### Enhancement pack — doctor, live preview, auto-dense
+- **`grok-hud doctor`**: local health check (Node, tmux, CLI, build, config,
+  auth, dashboard pid, status freshness, hooks, plugin version). Exit 1 on fail.
+- **Settings preview**: uses **live** session when available (`live` vs `fixture`
+  label); still falls back to sample data.
+- **`autoDenseBelow`**: when pane width &lt; N cols, paint as dense chip for that
+  frame only (does not rewrite config). Default **60** for codex/dense aesthetic;
+  **0** (off) for classic. Toggle in settings **`e`**.
+- Command doc `commands/doctor.md`; info prints `autoDenseBelow`.
+
 ## 0.8.0
 
 ### Phase D — docs, settings polish, idempotent install

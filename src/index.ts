@@ -110,6 +110,7 @@ export interface CliOptions {
   preset?: string;
   settings: boolean;
   info: boolean;
+  doctor: boolean;
   language?: string;
 }
 
@@ -137,6 +138,7 @@ export function parseArgs(argv: string[]): CliOptions {
     runInTerminal: false,
     settings: false,
     info: false,
+    doctor: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -241,6 +243,10 @@ export function parseArgs(argv: string[]): CliOptions {
       case "info":
         opts.info = true;
         break;
+      case "--doctor":
+      case "doctor":
+        opts.doctor = true;
+        break;
       case "--lang":
       case "--language":
         opts.language = argv[++i];
@@ -283,6 +289,7 @@ Also:
   grok-build-hud --preset full|essential|minimal
   grok-hud settings             # 设定界面（语言 中/英、预设、行数）
   grok-hud info                 # aesthetic + data priority + config path
+  grok-hud doctor               # local health check (tmux/auth/dashboard/…)
   grok-hud lang en              # English (default)
   grok-hud lang zh              # 简体中文
   grok-hud lang tw              # 繁體中文
@@ -314,6 +321,7 @@ export function formatHudInfo(grokHome: string): string {
     `  timeFormat: ${cfg.timeFormat ?? "relative"}`,
     `  usageEmphasisThreshold: ${cfg.usageEmphasisThreshold ?? 0}`,
     `  tokenRevealAtContextPercent: ${cfg.tokenRevealAtContextPercent ?? 0}`,
+    `  autoDenseBelow: ${cfg.autoDenseBelow ?? 0}`,
     ``,
     `Optional chips (Phase C):`,
     `  showGitFileStats:    ${onOff(d.showGitFileStats)}`,
@@ -447,6 +455,15 @@ export async function runCli(
   if (opts.info) {
     out(formatHudInfo(opts.grokHome ?? defaultGrokHome()));
     return 0;
+  }
+
+  if (opts.doctor) {
+    const { runDoctor, formatDoctorReport } = await import("./doctor.js");
+    const report = runDoctor({
+      grokHome: opts.grokHome ?? defaultGrokHome(),
+    });
+    out(formatDoctorReport(report));
+    return report.ok ? 0 : 1;
   }
 
   if (opts.settings) {

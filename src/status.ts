@@ -36,6 +36,7 @@ import {
   loadHudConfig,
   type HudDisplayConfig,
 } from "./hud-config.js";
+import { resolveAdaptiveConfig } from "./adaptive-config.js";
 import { formatResetFragment } from "./format-reset-time.js";
 import crypto from "node:crypto";
 import {
@@ -524,8 +525,7 @@ export function writeStatusFiles(
     ttyPath?: string | null;
   } = {},
 ): WriteStatusResult {
-  const cfg = loadHudConfig(grokHome);
-  const theme = themeForHudConfig(cfg, grokHome);
+  const baseCfg = loadHudConfig(grokHome);
   const dir = hudDataDir(grokHome);
   fs.mkdirSync(dir, { recursive: true });
 
@@ -536,6 +536,10 @@ export function writeStatusFiles(
       tmuxSession: options.tmuxSession,
       fallback: 100,
     });
+
+  // 0.9: narrow panes may collapse to dense chip for this paint only
+  const cfg = resolveAdaptiveConfig(baseCfg, maxWidth);
+  const theme = themeForHudConfig(cfg, grokHome);
 
   const compact = formatCompactLine(session, usage, cfg);
   const full = formatStatusBlock(session, usage, cfg);
