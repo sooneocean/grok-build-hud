@@ -39,6 +39,8 @@ else if (head === "status" || head === undefined) {
   mapped = ["--doctor", ...argv.slice(1)];
 } else if (head === "set") {
   mapped = ["set", ...argv.slice(1)];
+} else if (head === "get") {
+  mapped = ["get", ...argv.slice(1)];
 } else if (head === "lang" || head === "language" || head === "语言" || head === "語言") {
   mapped = ["--lang", argv[1] || "zh", ...argv.slice(2)];
 }

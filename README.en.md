@@ -121,6 +121,7 @@ grok-hud info                 # aesthetic + optional chips + data priority
 grok-hud doctor               # local health check
 grok-hud doctor --fix          # safe auto-repair
 grok-hud set aesthetic=codex  # non-interactive config
+grok-hud get aesthetic        # read key / full JSON
 grok-hud settings             # language / preset / aesthetic / chips a–e
 grok-hud lang en|zh|tw
 grok-build-hud --preset full|essential|minimal
@@ -211,7 +212,14 @@ Theme always tracks Grok `/theme` unless `GROK_HUD_LOCK=1`.
 
 ## How it works
 
-Reads local `~/.grok/sessions/**`, uses existing Grok auth for billing, writes under `~/.grok/hud/`, displays via same-window tmux. Does **not** upload your code.
+Reads local `~/.grok/sessions/**`, uses existing Grok auth for billing, writes under `~/.grok/hud/`, displays via same-window tmux. Does **not** upload your code. **No telemetry** — see [PRIVACY.md](./PRIVACY.md).
+
+### Maintainers: release
+
+```bash
+bash scripts/release.sh minor
+bash scripts/release.sh 1.2.0 --push
+```
 
 Upgrade in place (keeps your `config.json` aesthetic):
 

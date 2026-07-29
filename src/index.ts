@@ -114,6 +114,8 @@ export interface CliOptions {
   doctorFix: boolean;
   /** Non-interactive set pairs after `set` / `--set` */
   setPairs: Array<{ key: string; value: string }>;
+  /** get key or --keys / empty = full JSON */
+  getKey?: string | null;
   language?: string;
 }
 
@@ -144,6 +146,7 @@ export function parseArgs(argv: string[]): CliOptions {
     doctor: false,
     doctorFix: false,
     setPairs: [],
+    getKey: undefined,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -287,6 +290,20 @@ export function parseArgs(argv: string[]): CliOptions {
         }
         break;
       }
+      case "get":
+      case "--get": {
+        const next = argv[i + 1];
+        if (next && !(next.startsWith("-") && next !== "--keys" && next !== "--all")) {
+          opts.getKey = next;
+          i += 1;
+        } else if (next === "--keys" || next === "--all") {
+          opts.getKey = next;
+          i += 1;
+        } else {
+          opts.getKey = null; // full dump
+        }
+        break;
+      }
       case "--lang":
       case "--language":
         opts.language = argv[++i];
@@ -332,6 +349,7 @@ Also:
   grok-hud doctor               # local health check (tmux/auth/dashboard/…)
   grok-hud doctor --fix          # safe auto-repair (hooks/daemon/status)
   grok-hud set aesthetic=codex  # non-interactive config
+  grok-hud get aesthetic        # read one key (or full JSON)
   grok-hud lang en              # English (default)
   grok-hud lang zh              # 简体中文
   grok-hud lang tw              # 繁體中文
@@ -515,6 +533,26 @@ export async function runCli(
     const report = runDoctor({ grokHome });
     out(formatDoctorReport(report));
     return report.ok ? 0 : 1;
+  }
+
+  if (opts.getKey !== undefined) {
+    const { getConfigValue, formatSetHelp } = await import("./config-set.js");
+    const { loadHudConfig } = await import("./hud-config.js");
+    const grokHome = opts.grokHome ?? defaultGrokHome();
+    const hud = loadHudConfig(grokHome);
+    if (opts.getKey === null || opts.getKey === "") {
+      const r = getConfigValue(hud);
+      out(r.text);
+      return 0;
+    }
+    const r = getConfigValue(hud, opts.getKey);
+    if (!r.ok) {
+      err(r.error ?? "get failed");
+      if (opts.getKey === "help") out(formatSetHelp());
+      return 1;
+    }
+    out(r.text);
+    return 0;
   }
 
   if (opts.setPairs.length) {

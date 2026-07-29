@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0
+
+### CLI — get + richer set + release
+- **`grok-hud get [key]`**: read one config value, full JSON, or `--keys`.
+- **More `set` keys**: `barWidth`, `pathLevels`, `density`, `bold`,
+  `tokenReveal`, thresholds, `tokenDigits` / `tokenScope` / `contextValue` /
+  `usageValue`.
+- **`scripts/release.sh`**: version bump (package + plugin), CHANGELOG stub,
+  `npm test`, commit; optional `--push` for gitea+github.
+- **`PRIVACY.md`**: no telemetry; only local files + optional billing via Grok auth.
+
 ## 1.0.0
 
 ### Productization — doctor fix + non-interactive set

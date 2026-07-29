@@ -153,6 +153,104 @@ export function applyConfigSet(
     if (b == null) return { cfg, error: "alignLabels needs true|false" };
     return { cfg: { ...cfg, alignLabels: b } };
   }
+  if (k === "bold") {
+    const b = parseBool(v);
+    if (b == null) return { cfg, error: "bold needs true|false" };
+    return { cfg: { ...cfg, bold: b } };
+  }
+  if (k === "density") {
+    if (v !== "comfortable" && v !== "compact" && v !== "dense") {
+      return { cfg, error: "density must be comfortable|compact|dense" };
+    }
+    return { cfg: { ...cfg, density: v } };
+  }
+  if (k === "barwidth") {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 4 || n > 32) {
+      return { cfg, error: "barWidth must be 4–32" };
+    }
+    return { cfg: { ...cfg, barWidth: Math.floor(n) } };
+  }
+  if (k === "pathlevels") {
+    const n = Number(v);
+    if (n !== 1 && n !== 2 && n !== 3) {
+      return { cfg, error: "pathLevels must be 1|2|3" };
+    }
+    return { cfg: { ...cfg, pathLevels: n as 1 | 2 | 3 } };
+  }
+  if (k === "tokenrevealatcontextpercent" || k === "tokenreveal") {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0 || n > 100) {
+      return { cfg, error: "tokenRevealAtContextPercent must be 0–100" };
+    }
+    return { cfg: { ...cfg, tokenRevealAtContextPercent: n } };
+  }
+  if (k === "warningthreshold" || k === "warn") {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0 || n > 100) {
+      return { cfg, error: "warningThreshold must be 0–100" };
+    }
+    return { cfg: { ...cfg, warningThreshold: n } };
+  }
+  if (k === "criticalthreshold" || k === "crit") {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0 || n > 100) {
+      return { cfg, error: "criticalThreshold must be 0–100" };
+    }
+    return { cfg: { ...cfg, criticalThreshold: n } };
+  }
+  if (k === "tokendigits") {
+    if (v !== "exact" && v !== "short") {
+      return { cfg, error: "tokenDigits must be exact|short" };
+    }
+    return {
+      cfg: {
+        ...cfg,
+        display: { ...cfg.display, tokenDigits: v },
+      },
+    };
+  }
+  if (k === "tokenscope") {
+    if (v !== "last" && v !== "session" && v !== "both") {
+      return { cfg, error: "tokenScope must be last|session|both" };
+    }
+    return {
+      cfg: {
+        ...cfg,
+        display: { ...cfg.display, tokenScope: v },
+      },
+    };
+  }
+  if (k === "contextvalue") {
+    if (
+      v !== "percent" &&
+      v !== "tokens" &&
+      v !== "both" &&
+      v !== "remaining"
+    ) {
+      return {
+        cfg,
+        error: "contextValue must be percent|tokens|both|remaining",
+      };
+    }
+    return {
+      cfg: {
+        ...cfg,
+        display: { ...cfg.display, contextValue: v },
+      },
+    };
+  }
+  if (k === "usagevalue") {
+    if (v !== "percent" && v !== "remaining") {
+      return { cfg, error: "usageValue must be percent|remaining" };
+    }
+    return {
+      cfg: {
+        ...cfg,
+        display: { ...cfg.display, usageValue: v },
+      },
+    };
+  }
 
   const field = DISPLAY_BOOL[k];
   if (field) {
@@ -170,7 +268,7 @@ export function applyConfigSet(
 
   return {
     cfg,
-    error: `unknown key "${key}". Try: aesthetic, preset, language, autoDenseBelow, showGitFileStats, showCompactions, showSpeed, …`,
+    error: `unknown key "${key}". Try: aesthetic, preset, language, autoDenseBelow, barWidth, showGitFileStats, showCompactions, showSpeed, …  (grok-hud get --keys)`,
   };
 }
 
@@ -201,17 +299,126 @@ export function applyConfigSets(
 
 export function formatSetHelp(): string {
   return `grok-hud set key=value [key=value …]
+grok-hud get [key]            # print one value or full JSON
+grok-hud get --keys           # list settable keys
 
 Examples:
   grok-hud set aesthetic=codex
   grok-hud set language=zh showSpeed=on
-  grok-hud set autoDenseBelow=60
+  grok-hud set autoDenseBelow=60 barWidth=10
   grok-hud set showGitFileStats=true showCompactions=on
+  grok-hud get aesthetic
+  grok-hud get display.showSpeed
 
-Keys: aesthetic | preset | language | autoDenseBelow | timeFormat
-      usageEmphasisThreshold | statusLines | separator | barStyle | alignLabels
+Keys: aesthetic | preset | language | density | autoDenseBelow | timeFormat
+      usageEmphasisThreshold | statusLines | separator | barStyle | barWidth
+      pathLevels | tokenReveal | warningThreshold | criticalThreshold
+      alignLabels | bold | tokenDigits | tokenScope | contextValue | usageValue
       showGitFileStats | showCompactions | showSpeed | showGitAheadBehind
-      showDiffStats | showTokenBreakdown | showTitle | …
+      showDiffStats | showTokenBreakdown | showTitle | showLive | …
 
-Config: ${path.join("~/.grok/hud", "config.json")}`;
+Config: ${path.join("~/.grok/hud", "config.json")}
+Privacy: no telemetry — only local files + your Grok auth for quota API.`;
+}
+
+/** Dot-path get: aesthetic | display.showSpeed | … */
+export function getConfigValue(
+  cfg: HudDisplayConfig,
+  key?: string,
+): { ok: boolean; text: string; error?: string } {
+  if (!key || key === "--all" || key === "all") {
+    return { ok: true, text: JSON.stringify(cfg, null, 2) };
+  }
+  if (key === "--keys" || key === "keys") {
+    return {
+      ok: true,
+      text: [
+        "aesthetic",
+        "preset",
+        "language",
+        "density",
+        "autoDenseBelow",
+        "timeFormat",
+        "usageEmphasisThreshold",
+        "statusLines",
+        "separator",
+        "barStyle",
+        "barWidth",
+        "pathLevels",
+        "tokenRevealAtContextPercent",
+        "warningThreshold",
+        "criticalThreshold",
+        "alignLabels",
+        "bold",
+        "tokenDigits",
+        "tokenScope",
+        "contextValue",
+        "usageValue",
+        ...Object.values(DISPLAY_BOOL).map((f) => `display.${f}`),
+      ].join("\n"),
+    };
+  }
+
+  const raw = key.trim();
+  // display.foo
+  if (raw.toLowerCase().startsWith("display.")) {
+    const field = raw.slice("display.".length);
+    const d = cfg.display as Record<string, unknown>;
+    // case-insensitive match
+    const hit = Object.keys(d).find(
+      (k) => k.toLowerCase() === field.toLowerCase(),
+    );
+    if (!hit) {
+      return { ok: false, text: "", error: `unknown display field: ${field}` };
+    }
+    return { ok: true, text: String(d[hit]) };
+  }
+
+  const k = normKey(raw);
+  const top: Record<string, unknown> = {
+    aesthetic: cfg.aesthetic,
+    preset: cfg.preset,
+    language: cfg.language,
+    density: cfg.density,
+    autodensebelow: cfg.autoDenseBelow,
+    timeformat: cfg.timeFormat,
+    usageemphasisthreshold: cfg.usageEmphasisThreshold,
+    statuslines: cfg.statusLines,
+    separator: cfg.separator,
+    barstyle: cfg.barStyle,
+    barwidth: cfg.barWidth,
+    pathlevels: cfg.pathLevels,
+    tokenrevealatcontextpercent: cfg.tokenRevealAtContextPercent,
+    tokenreveal: cfg.tokenRevealAtContextPercent,
+    warningthreshold: cfg.warningThreshold,
+    criticalthreshold: cfg.criticalThreshold,
+    alignlabels: cfg.alignLabels,
+    bold: cfg.bold,
+  };
+  if (k in top) {
+    return { ok: true, text: String(top[k] ?? "") };
+  }
+  // display bool aliases
+  const df = DISPLAY_BOOL[k];
+  if (df) {
+    return { ok: true, text: String(cfg.display[df]) };
+  }
+  if (k === "tokendigits") {
+    return { ok: true, text: String(cfg.display.tokenDigits) };
+  }
+  if (k === "tokenscope") {
+    return { ok: true, text: String(cfg.display.tokenScope) };
+  }
+  if (k === "contextvalue") {
+    return { ok: true, text: String(cfg.display.contextValue) };
+  }
+  if (k === "usagevalue") {
+    return { ok: true, text: String(cfg.display.usageValue) };
+  }
+
+  return {
+    ok: false,
+    text: "",
+    error: `unknown key "${key}" — try grok-hud get --keys`,
+  };
 }

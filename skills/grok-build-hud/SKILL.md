@@ -41,6 +41,7 @@ grok-hud info                     # aesthetic + optional chips + data priority
 grok-hud doctor                   # local health check
 grok-hud doctor --fix              # safe auto-repair
 grok-hud set aesthetic=codex      # non-interactive config
+grok-hud get aesthetic            # read key / JSON
 grok-hud settings                 # language / preset / aesthetic / chips a–e
 grok-hud lang en|zh|tw            # en default
 grok-build-hud --preset full|essential|minimal

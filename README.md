@@ -23,7 +23,7 @@ Grok 4.5 · AI FILM SPACE/0717 · ●
 | 语言 | 默认 **English**，可切简体中文 / 繁體 |
 
 仓库：http://172.238.15.154:3000/Redredchen01/grok-build-hud  
-插件名：`grok-build-hud` · **1.0.0**（版本见 [`plugin.json`](./plugin.json)）
+插件名：`grok-build-hud` · **1.1.0**（版本见 [`plugin.json`](./plugin.json)）
 
 > **说明：** 本项目由我们自行开发与维护，**不是** xAI / Grok Build 官方插件或官方功能。仅兼容 Grok 的插件安装机制（`plugin.json` 等），便于本地 `grok plugin install`。
 
@@ -204,6 +204,7 @@ grok-hud info                 # aesthetic + 可选芯片 + 数据优先级
 grok-hud doctor               # 本机自检
 grok-hud doctor --fix          # 安全自愈（hooks / daemon / 状态）
 grok-hud set aesthetic=codex  # 非交互改配置
+grok-hud get aesthetic        # 读配置键 / 全量 JSON
 grok-hud settings             # 含 a/b/c/d 芯片 · e 窄窗自动 dense
 grok-hud lang zh|en|tw
 grok-build-hud --preset full|essential|minimal
@@ -398,7 +399,14 @@ grok-build-hud/               # Gitea 仓库目录名
 3. 后台 daemon 写入 `~/.grok/hud/` 与按 tmux 会话隔离的状态文件  
 4. 同窗口 **tmux 状态栏** 展示  
 
-**不上传**你的代码。
+**不上传**你的代码。无遥测 / 分析 SDK，详见 [PRIVACY.md](./PRIVACY.md)。
+
+### 发版（维护者）
+
+```bash
+bash scripts/release.sh minor        # 测试 + commit，不推
+bash scripts/release.sh 1.2.0 --push # 指定版本并双推
+```
 
 ---
 
