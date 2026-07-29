@@ -442,11 +442,12 @@ export function loadHudConfig(
           : calmAesthetic
             ? 80
             : (base.usageEmphasisThreshold ?? 0),
+      // Explicit 0 in JSON disables; missing field → 60 for codex/dense, else 0
       autoDenseBelow:
         typeof raw.autoDenseBelow === "number"
           ? raw.autoDenseBelow
           : calmAesthetic
-            ? (base.autoDenseBelow ?? 60)
+            ? 60
             : (base.autoDenseBelow ?? 0),
       externalUsagePath: raw.externalUsagePath ?? base.externalUsagePath,
       externalUsageWritePath:
