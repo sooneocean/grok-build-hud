@@ -8,6 +8,11 @@ import os from "node:os";
 
 export type HudPreset = "full" | "essential" | "minimal";
 export type LineLayout = "expanded" | "compact";
+/** Visual language inspired by Codex App calm chrome. */
+export type HudAesthetic = "classic" | "codex" | "dense";
+export type HudDensity = "comfortable" | "compact" | "dense";
+export type SeparatorStyle = "middot" | "pipe" | "space";
+export type BarStyle = "block" | "thin" | "dot";
 
 /** Orderable body elements (Claude-HUD style). */
 export type HudElement =
@@ -56,6 +61,22 @@ export interface HudDisplayConfig {
   projectLineOrder?: FirstLineSegment[];
   /** Pad 窗/额 labels to the same visual width before bars. */
   alignLabels?: boolean;
+  /**
+   * Visual language: classic (0.4.x default), codex (calm Codex-app-like),
+   * dense (chip-like, narrow windows).
+   */
+  aesthetic?: HudAesthetic;
+  /** Spacing / bar / token density. Overridden by aesthetic presets unless set. */
+  density?: HudDensity;
+  /** Field separator on plain lines. */
+  separator?: SeparatorStyle;
+  /** Progress track glyph style. */
+  barStyle?: BarStyle;
+  /**
+   * Hide exact token breakdown until context % reaches this (codex calm).
+   * 0 = always show when showTokenBreakdown. Default 0 for classic, 70 for codex.
+   */
+  tokenRevealAtContextPercent?: number;
   display: {
     showModel: boolean;
     showProject: boolean;
@@ -128,6 +149,11 @@ export const PRESET_FULL: HudDisplayConfig = {
   mergeGroups: DEFAULT_MERGE_GROUPS.map((g) => [...g]),
   projectLineOrder: [...DEFAULT_PROJECT_LINE_ORDER],
   alignLabels: true,
+  aesthetic: "classic",
+  density: "comfortable",
+  separator: "pipe",
+  barStyle: "block",
+  tokenRevealAtContextPercent: 0,
   display: {
     showModel: true,
     showProject: true,
@@ -315,6 +341,14 @@ export function loadHudConfig(
       mergeGroups,
       projectLineOrder,
       alignLabels: raw.alignLabels ?? base.alignLabels ?? true,
+      aesthetic: normalizeAesthetic(raw.aesthetic ?? base.aesthetic),
+      density: normalizeDensity(raw.density ?? base.density),
+      separator: normalizeSeparator(raw.separator ?? base.separator),
+      barStyle: normalizeBarStyle(raw.barStyle ?? base.barStyle),
+      tokenRevealAtContextPercent:
+        typeof raw.tokenRevealAtContextPercent === "number"
+          ? raw.tokenRevealAtContextPercent
+          : (base.tokenRevealAtContextPercent ?? 0),
       display: {
         ...base.display,
         ...(raw.display ?? {}),
@@ -345,6 +379,26 @@ function normalizeContextValue(v: unknown): ContextValueMode {
     return v;
   }
   return "percent";
+}
+
+function normalizeAesthetic(v: unknown): HudAesthetic {
+  if (v === "codex" || v === "dense" || v === "classic") return v;
+  return "classic";
+}
+
+function normalizeDensity(v: unknown): HudDensity {
+  if (v === "compact" || v === "dense" || v === "comfortable") return v;
+  return "comfortable";
+}
+
+function normalizeSeparator(v: unknown): SeparatorStyle {
+  if (v === "pipe" || v === "space" || v === "middot") return v;
+  return "pipe";
+}
+
+function normalizeBarStyle(v: unknown): BarStyle {
+  if (v === "thin" || v === "dot" || v === "block") return v;
+  return "block";
 }
 
 /** Ensure config exists with English default (idempotent). */
@@ -411,6 +465,132 @@ export function applyPreset(preset: HudPreset): HudDisplayConfig {
     projectLineOrder: [...DEFAULT_PROJECT_LINE_ORDER],
     display: { ...PRESET_FULL.display },
   };
+}
+
+/** Codex-app-like calm defaults layered on a base config (keeps language). */
+export function applyAesthetic(
+  aesthetic: HudAesthetic,
+  base?: HudDisplayConfig,
+): HudDisplayConfig {
+  const lang = base?.language ?? "en";
+  const root =
+    base ??
+    ({
+      ...PRESET_FULL,
+      elementOrder: [...DEFAULT_ELEMENT_ORDER],
+      mergeGroups: DEFAULT_MERGE_GROUPS.map((g) => [...g]),
+      projectLineOrder: [...DEFAULT_PROJECT_LINE_ORDER],
+      display: { ...PRESET_FULL.display },
+    } as HudDisplayConfig);
+
+  if (aesthetic === "classic") {
+    return {
+      ...root,
+      language: lang,
+      aesthetic: "classic",
+      density: "comfortable",
+      separator: "pipe",
+      barStyle: "block",
+      barWidth: 14,
+      tokenRevealAtContextPercent: 0,
+      alignLabels: true,
+      display: {
+        ...root.display,
+        contextValue: "both",
+        tokenDigits: "exact",
+        showTitle: true,
+      },
+    };
+  }
+
+  if (aesthetic === "dense") {
+    return {
+      ...root,
+      language: lang,
+      aesthetic: "dense",
+      density: "dense",
+      separator: "space",
+      barStyle: "dot",
+      barWidth: 6,
+      statusLines: 1,
+      lineLayout: "compact",
+      tokenRevealAtContextPercent: 85,
+      alignLabels: false,
+      projectLineOrder: ["model", "project", "live"],
+      elementOrder: ["project", "context", "usage", "tools"],
+      mergeGroups: [["context", "usage"]],
+      display: {
+        ...root.display,
+        contextValue: "percent",
+        usageValue: "percent",
+        tokenDigits: "short",
+        showTitle: false,
+        showSessionTime: false,
+        showTurns: false,
+        showTools: false,
+        showTokenBreakdown: false,
+        showProductBreakdown: false,
+        showDiffStats: false,
+        showTodos: false,
+        showAgents: false,
+        showToolActivity: true,
+      },
+    };
+  }
+
+  // codex — recommended calm strip
+  return {
+    ...root,
+    language: lang,
+    aesthetic: "codex",
+    density: "compact",
+    separator: "middot",
+    barStyle: "thin",
+    barWidth: 10,
+    statusLines: 2,
+    tokenRevealAtContextPercent: 70,
+    alignLabels: true,
+    projectLineOrder: ["model", "project", "live"],
+    elementOrder: [
+      "project",
+      "context",
+      "usage",
+      "meta",
+      "tools",
+      "agents",
+      "todos",
+    ],
+    mergeGroups: [["context", "usage", "meta"]],
+    display: {
+      ...root.display,
+      contextValue: "percent",
+      usageValue: "percent",
+      tokenDigits: "short",
+      tokenScope: "last",
+      showTitle: false,
+      showTokenBreakdown: true,
+      showProductBreakdown: true,
+      showSessionTime: false,
+      showTurns: false,
+      showTools: false,
+      showDiffStats: false,
+      showToolActivity: true,
+      showAgents: true,
+      showTodos: true,
+    },
+  };
+}
+
+export function separatorString(style?: SeparatorStyle): string {
+  if (style === "pipe") return " │ ";
+  if (style === "space") return "  ";
+  return " · "; // middot default for codex calm
+}
+
+export function barChars(style?: BarStyle): { filled: string; empty: string } {
+  if (style === "thin") return { filled: "━", empty: "─" };
+  if (style === "dot") return { filled: "●", empty: "○" };
+  return { filled: "█", empty: "░" };
 }
 
 /** Documented display option keys (for settings / docs). */

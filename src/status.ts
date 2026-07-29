@@ -23,6 +23,8 @@ import {
   miniBar,
   tmuxRole,
   resolveTheme,
+  THEME_CODEX,
+  isLightTheme,
   type HudTheme,
 } from "./theme.js";
 import {
@@ -48,6 +50,18 @@ import {
 
 export function hudDataDir(grokHome = defaultGrokHome()): string {
   return path.join(grokHome, "hud");
+}
+
+/** Prefer Codex calm palette when aesthetic=codex and Grok theme is dark. */
+export function themeForHudConfig(
+  cfg: HudDisplayConfig,
+  grokHome?: string,
+): HudTheme {
+  const followed = resolveTheme(undefined, process.env, { grokHome });
+  if (cfg.aesthetic === "codex" && !isLightTheme(followed)) {
+    return THEME_CODEX;
+  }
+  return followed;
 }
 
 /** Plain multi-line status block (for files / /hud / hooks). */
@@ -464,7 +478,7 @@ export function writeStatusFiles(
   } = {},
 ): WriteStatusResult {
   const cfg = loadHudConfig(grokHome);
-  const theme = resolveTheme(undefined, process.env, { grokHome });
+  const theme = themeForHudConfig(cfg, grokHome);
   const dir = hudDataDir(grokHome);
   fs.mkdirSync(dir, { recursive: true });
 

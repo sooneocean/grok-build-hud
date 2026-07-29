@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.2
+
+### Design aesthetics (Codex App–inspired, Wave D0)
+- **Docs**: `docs/DESIGN-CODEX-AESTHETICS.md` — full multi-wave todo plan
+  (calm chrome, density, semantic color, chip layout).
+- **`aesthetic`**: `classic` | `codex` | `dense` via config or
+  `grok-hud settings` → `9` (applies density/separator/bar/token gate).
+- **`separator`**: `middot` · `pipe` │ `space`
+- **`barStyle`**: `block` █░ | `thin` ━─ | `dot` ●○
+- **`tokenRevealAtContextPercent`**: hide token wall until ctx hot (codex: 70).
+- **THEME_CODEX**: zinc neutrals + emerald accent; used when aesthetic=codex
+  on dark Grok themes.
+- Existing installs stay **classic** until you switch (no surprise restyle).
+
 ## 0.4.1
 
 ### Features (Phase B — Claude-style info architecture)

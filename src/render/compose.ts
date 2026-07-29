@@ -10,10 +10,12 @@ import {
 } from "../bar.js";
 import { formatToolLine } from "../activity.js";
 import {
+  barChars,
   DEFAULT_ELEMENT_ORDER,
   DEFAULT_MERGE_GROUPS,
   DEFAULT_PROJECT_LINE_ORDER,
   loadHudConfig,
+  separatorString,
   type FirstLineSegment,
   type HudDisplayConfig,
   type HudElement,
@@ -122,6 +124,9 @@ function tokenLinesForHud(
   cfg: HudDisplayConfig,
 ): string[] {
   if (!cfg.display.showTokenBreakdown) return [];
+  // Codex calm: hide token wall until context is hot
+  const gate = cfg.tokenRevealAtContextPercent ?? 0;
+  if (gate > 0 && session.contextPercent < gate) return [];
   const mode = cfg.display.tokenDigits ?? "exact";
   const { last, sessionSum } = pickTokenForDisplay(
     session,
@@ -235,10 +240,24 @@ function buildProjectLine(
     const t = emit(seg);
     if (t) parts.push(t);
   }
-  return parts.join(" │ ");
+  const sep = separatorString(cfg.separator);
+  return parts.join(sep);
 }
 
 /** Context fragment with optional label pad (space after label preserved). */
+function progressBar(percent: number, cfg: HudDisplayConfig): string {
+  const { filled, empty } = barChars(cfg.barStyle);
+  const w =
+    cfg.barWidth && cfg.barWidth > 0
+      ? cfg.barWidth
+      : cfg.density === "dense"
+        ? 6
+        : cfg.density === "compact"
+          ? 10
+          : 12;
+  return renderBar(percent, w, filled, empty);
+}
+
 function fragContext(
   session: SessionSnapshot,
   cfg: HudDisplayConfig,
@@ -247,7 +266,9 @@ function fragContext(
   const d = cfg.display;
   const align = cfg.alignLabels !== false;
   const label = alignedLabel(L.ctx, L, align);
-  const cBar = d.showContextBar ? renderBar(session.contextPercent) + " " : "";
+  const cBar = d.showContextBar
+    ? progressBar(session.contextPercent, cfg) + " "
+    : "";
   return `${label} ${cBar}${contextValueText(session, d.contextValue)}`;
 }
 
@@ -265,17 +286,32 @@ function fragUsage(
       d.usageValue === "remaining"
         ? Math.max(0, 100 - usage.percent)
         : usage.percent;
-    const uBar = d.showContextBar ? renderBar(displayPct) + " " : "";
+    const uBar = d.showContextBar ? progressBar(displayPct, cfg) + " " : "";
+    // Classic: show used/limit; codex/dense: percent + reset only (calm)
+    const showAbs =
+      (cfg.aesthetic ?? "classic") === "classic" && cfg.density !== "dense";
     const abs =
-      usage.used != null && usage.limit != null
+      showAbs && usage.used != null && usage.limit != null
         ? ` ${formatTokenCount(usage.used)}/${formatTokenCount(usage.limit)}`
         : "";
-    const reset = usage.resetsIn ? ` · ${usage.resetsIn} ${L.left}` : "";
+    const mid = separatorString(cfg.separator).trim() || "·";
+    const reset = usage.resetsIn
+      ? ` ${mid} ${usage.resetsIn}${
+          (cfg.aesthetic ?? "classic") === "codex" ? "" : ` ${L.left}`
+        }`
+      : "";
     const val = usageValueText(usage, d.usageValue ?? "percent");
-    // remaining mode: bar + "24% left"; percent mode: bar + "76%"
     const valBit =
       d.usageValue === "remaining" ? `${val} ${L.left}` : val;
-    return `${label} ${uBar}${valBit}${usage.period ? ` (${usage.period})` : ""}${abs}${reset}`;
+    const period =
+      usage.period &&
+      (cfg.aesthetic ?? "classic") === "classic" &&
+      cfg.density === "comfortable"
+        ? ` (${usage.period})`
+        : usage.period
+          ? ` ${usage.period === "weekly" ? L.weekly || "w" : usage.period}`
+          : "";
+    return `${label} ${uBar}${valBit}${period}${abs}${reset}`;
   }
   return `${label} — ${usage.message ?? "n/a"}`;
 }
@@ -313,7 +349,7 @@ function fragMeta(
       .find((s) => /GrokBuild/i.test(s));
     if (gb) meta.push(gb);
   }
-  return meta.join(" │ ");
+  return meta.join(separatorString(cfg.separator));
 }
 
 function fragTokens(session: SessionSnapshot, cfg: HudDisplayConfig): string {
@@ -407,7 +443,7 @@ export function composeHudLines(
           if (nf) bits.push(nf);
           j += 1;
         }
-        lines.push(bits.join("  ·  "));
+        lines.push(bits.join(separatorString(cfg.separator)));
         i = j;
         continue;
       }
@@ -426,14 +462,13 @@ export function composeHudLines(
       if (nf) bits.push(nf);
       j += 1;
     }
-    lines.push(bits.join(" │ "));
+    lines.push(bits.join(separatorString(cfg.separator)));
     i = j;
   }
 
   // ΣTOK extra row when present
   const extra = fragTokensExtra(session, cfg);
   if (extra) {
-    // insert after metrics (after first non-project line) or append
     const insertAt = lines.length > 0 && order.includes("project") ? 2 : 1;
     if (insertAt <= lines.length) {
       lines.splice(insertAt, 0, extra);
@@ -443,7 +478,9 @@ export function composeHudLines(
   }
 
   if (cfg.lineLayout === "compact") {
-    return [lines.slice(0, 2).join(" · ")].filter(Boolean);
+    return [lines.slice(0, 2).join(separatorString(cfg.separator))].filter(
+      Boolean,
+    );
   }
   return lines.filter(Boolean);
 }

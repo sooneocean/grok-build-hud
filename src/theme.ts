@@ -155,6 +155,26 @@ export const THEME_CLEAR_DARK: HudTheme = {
   stale: "#6b7380",
 };
 
+/**
+ * Codex calm — zinc neutrals + single emerald accent (Codex App / CodexBar vibe).
+ * Semantic severity only for ok/warn/crit; not a rainbow strip.
+ */
+export const THEME_CODEX: HudTheme = {
+  name: "codex",
+  statusBg: "default",
+  statusFg: "#e5e7eb",
+  label: "#6b7280",
+  value: "#e5e7eb",
+  sep: "#3f3f46",
+  mark: "#34d399",
+  ok: "#4ade80",
+  warn: "#fbbf24",
+  crit: "#f87171",
+  barEmpty: "#27272a",
+  live: "#34d399",
+  stale: "#52525b",
+};
+
 export const THEME_DEFAULT: HudTheme = THEME_TOKYONIGHT;
 
 const GROK_THEME_ALIASES: Record<string, string> = {
@@ -177,6 +197,8 @@ const GROK_THEME_ALIASES: Record<string, string> = {
   oscuramindnight: "oscuramidnight",
   "oscura-midnight": "oscuramidnight",
   oscura: "oscuramidnight",
+  codex: "codex",
+  "codex-calm": "codex",
   auto: "auto",
   system: "auto",
 };
@@ -199,6 +221,8 @@ export function paletteForGrokTheme(rawName: string): HudTheme {
       return THEME_ROSEPINE;
     case "oscuramidnight":
       return THEME_OSCURA;
+    case "codex":
+      return THEME_CODEX;
     case "light":
       return THEME_CLEAR_LIGHT;
     case "dark":

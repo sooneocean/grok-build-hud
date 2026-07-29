@@ -55,6 +55,10 @@ export interface HudStrings {
   previewHint: string;
   alignLabels: string;
   usageRemaining: string;
+  aesthetic: string;
+  aestheticClassic: string;
+  aestheticCodex: string;
+  aestheticDense: string;
 }
 
 const ZH_HANS: HudStrings = {
@@ -104,6 +108,10 @@ const ZH_HANS: HudStrings = {
   previewHint: "按当前设定渲染示例",
   alignLabels: "标签对齐 (窗/额)",
   usageRemaining: "额度显示剩余%",
+  aesthetic: "视觉风格",
+  aestheticClassic: "经典 (工程面板)",
+  aestheticCodex: "Codex 冷静",
+  aestheticDense: "极简芯片",
 };
 
 const ZH_HANT: HudStrings = {
@@ -153,6 +161,10 @@ const ZH_HANT: HudStrings = {
   previewHint: "依目前設定渲染範例",
   alignLabels: "標籤對齊 (窗/額)",
   usageRemaining: "額度顯示剩餘%",
+  aesthetic: "視覺風格",
+  aestheticClassic: "經典 (工程面板)",
+  aestheticCodex: "Codex 冷靜",
+  aestheticDense: "極簡芯片",
 };
 
 const EN: HudStrings = {
@@ -202,6 +214,10 @@ const EN: HudStrings = {
   previewHint: "Render sample with current settings",
   alignLabels: "Align labels (ctx/use)",
   usageRemaining: "Usage as remaining %",
+  aesthetic: "Aesthetic",
+  aestheticClassic: "Classic (full chrome)",
+  aestheticCodex: "Codex calm",
+  aestheticDense: "Dense chips",
 };
 
 export function normalizeLang(raw?: string | null): HudLang {

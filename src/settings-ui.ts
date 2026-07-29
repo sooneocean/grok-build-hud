@@ -4,9 +4,11 @@
  */
 import * as readline from "node:readline";
 import {
+  applyAesthetic,
   applyPreset,
   loadHudConfig,
   saveHudConfig,
+  type HudAesthetic,
   type HudDisplayConfig,
   type HudPreset,
 } from "./hud-config.js";
@@ -75,11 +77,38 @@ function printMenu(cfg: HudDisplayConfig, out: (s: string) => void): void {
     }]`,
   );
   out(`│  8) ${s.preview.padEnd(14)}  ${s.previewHint}`);
+  const aest = cfg.aesthetic ?? "classic";
+  out(
+    `│  9) ${s.aesthetic.padEnd(14)}  [${aest}]  ${
+      aest === "codex"
+        ? s.aestheticCodex
+        : aest === "dense"
+          ? s.aestheticDense
+          : s.aestheticClassic
+    }`,
+  );
   out(`│`);
   out(`│  0) ${s.saveExit}`);
   out(`│  q) ${s.quitNoSave}`);
   out(`└──────────────────────────────────────`);
   out("");
+}
+
+async function pickAesthetic(
+  rl: readline.Interface,
+  cfg: HudDisplayConfig,
+  out: (s: string) => void,
+): Promise<HudAesthetic> {
+  const s = t(cfg.language);
+  out(`  1) classic  — ${s.aestheticClassic}`);
+  out(`  2) codex    — ${s.aestheticCodex}`);
+  out(`  3) dense    — ${s.aestheticDense}`);
+  out(`  b) ${s.back}`);
+  const ans = await ask(rl, `  ${s.choose}: `);
+  if (ans === "1" || ans === "classic") return "classic";
+  if (ans === "2" || ans === "codex") return "codex";
+  if (ans === "3" || ans === "dense") return "dense";
+  return cfg.aesthetic ?? "classic";
 }
 
 function samplePreview(cfg: HudDisplayConfig): string {
@@ -316,6 +345,19 @@ export async function runSettingsUi(
         }
         out(`  ────────────`);
         out("");
+        continue;
+      }
+      if (ans === "9" || ans === "aesthetic" || ans === "style") {
+        const next = await pickAesthetic(rl, cfg, out);
+        if (next !== (cfg.aesthetic ?? "classic")) {
+          cfg = applyAesthetic(next, cfg);
+          dirty = true;
+          out(`  → ${next}`);
+          out(`  ── ${s.preview} ──`);
+          for (const line of samplePreview(cfg).split("\n")) {
+            out(`  ${line}`);
+          }
+        }
         continue;
       }
       out(`  ${t(cfg.language).invalid}`);

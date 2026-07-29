@@ -7,6 +7,7 @@ import { composeHudLines, composeHudText } from "../src/render/compose.js";
 import { formatStatusBlock } from "../src/status.js";
 import { renderHud } from "../src/render.js";
 import {
+  applyAesthetic,
   PRESET_FULL,
   PRESET_MINIMAL,
   type HudDisplayConfig,
@@ -170,6 +171,26 @@ describe("compose pipeline", () => {
     const text = composeHudText(snap, usage, PRESET_FULL);
     assert.match(text, /Explore project status/);
     assert.match(text, /scout/);
+  });
+
+  it("codex aesthetic uses middot, thin bar, no token wall at low ctx", () => {
+    const snap = loadSnapshotFromDir(fixture)!;
+    // fixture ctx 37% < 70 gate
+    const cfg = applyAesthetic("codex", { ...PRESET_FULL, language: "en" });
+    const text = composeHudText(snap, usage, cfg);
+    assert.match(text, / · /); // middot separator
+    assert.doesNotMatch(text, /TOK IN/); // below reveal gate
+    assert.match(text, /37%/);
+    // thin bar glyphs
+    assert.match(text, /[━─]/);
+  });
+
+  it("dense aesthetic is compact single line", () => {
+    const snap = loadSnapshotFromDir(fixture)!;
+    const cfg = applyAesthetic("dense", PRESET_FULL);
+    const lines = composeHudLines(snap, usage, cfg);
+    assert.equal(lines.length, 1);
+    assert.match(lines[0]!, /37%/);
   });
 });
 
