@@ -38,7 +38,9 @@ Re-run after `git pull` is safe (keeps existing `~/.grok/hud/config.json` aesthe
 grok                              # wrapped: Grok + bottom HUD (same tab)
 grok-hud status                   # one-shot print
 grok-hud info                     # aesthetic + optional chips + data priority
-grok-hud doctor                   # local health check (tmux/auth/dashboard/…)
+grok-hud doctor                   # local health check
+grok-hud doctor --fix              # safe auto-repair
+grok-hud set aesthetic=codex      # non-interactive config
 grok-hud settings                 # language / preset / aesthetic / chips a–e
 grok-hud lang en|zh|tw            # en default
 grok-build-hud --preset full|essential|minimal

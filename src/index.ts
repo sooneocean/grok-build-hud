@@ -111,6 +111,9 @@ export interface CliOptions {
   settings: boolean;
   info: boolean;
   doctor: boolean;
+  doctorFix: boolean;
+  /** Non-interactive set pairs after `set` / `--set` */
+  setPairs: Array<{ key: string; value: string }>;
   language?: string;
 }
 
@@ -139,6 +142,8 @@ export function parseArgs(argv: string[]): CliOptions {
     settings: false,
     info: false,
     doctor: false,
+    doctorFix: false,
+    setPairs: [],
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -246,7 +251,42 @@ export function parseArgs(argv: string[]): CliOptions {
       case "--doctor":
       case "doctor":
         opts.doctor = true;
+        // peek --fix
+        if (argv[i + 1] === "--fix" || argv[i + 1] === "fix") {
+          opts.doctorFix = true;
+          i += 1;
+        }
         break;
+      case "--fix":
+        // doctor --fix when already set doctor, or bare with doctor later
+        if (opts.doctor) opts.doctorFix = true;
+        else opts.doctorFix = true; // allow --fix alone → doctor+fix
+        opts.doctor = true;
+        break;
+      case "set":
+      case "--set": {
+        const rest = argv.slice(i + 1);
+        const tokens: string[] = [];
+        for (const t of rest) {
+          if (t.startsWith("-") && !t.includes("=")) break;
+          tokens.push(t);
+        }
+        i += tokens.length;
+        for (let j = 0; j < tokens.length; j++) {
+          const t = tokens[j]!;
+          if (t.includes("=")) {
+            const eq = t.indexOf("=");
+            opts.setPairs.push({
+              key: t.slice(0, eq),
+              value: t.slice(eq + 1),
+            });
+          } else if (tokens[j + 1] != null) {
+            opts.setPairs.push({ key: t, value: tokens[j + 1]! });
+            j += 1;
+          }
+        }
+        break;
+      }
       case "--lang":
       case "--language":
         opts.language = argv[++i];
@@ -290,6 +330,8 @@ Also:
   grok-hud settings             # 设定界面（语言 中/英、预设、行数）
   grok-hud info                 # aesthetic + data priority + config path
   grok-hud doctor               # local health check (tmux/auth/dashboard/…)
+  grok-hud doctor --fix          # safe auto-repair (hooks/daemon/status)
+  grok-hud set aesthetic=codex  # non-interactive config
   grok-hud lang en              # English (default)
   grok-hud lang zh              # 简体中文
   grok-hud lang tw              # 繁體中文
@@ -458,12 +500,44 @@ export async function runCli(
   }
 
   if (opts.doctor) {
-    const { runDoctor, formatDoctorReport } = await import("./doctor.js");
-    const report = runDoctor({
-      grokHome: opts.grokHome ?? defaultGrokHome(),
-    });
+    const {
+      runDoctor,
+      formatDoctorReport,
+      runDoctorFix,
+      formatDoctorFixReport,
+    } = await import("./doctor.js");
+    const grokHome = opts.grokHome ?? defaultGrokHome();
+    if (opts.doctorFix) {
+      const fix = await runDoctorFix({ grokHome });
+      out(formatDoctorFixReport(fix));
+      return fix.after.ok ? 0 : 1;
+    }
+    const report = runDoctor({ grokHome });
     out(formatDoctorReport(report));
     return report.ok ? 0 : 1;
+  }
+
+  if (opts.setPairs.length) {
+    const { applyConfigSets, formatSetHelp } = await import("./config-set.js");
+    const grokHome = opts.grokHome ?? defaultGrokHome();
+    if (opts.setPairs.length === 0) {
+      out(formatSetHelp());
+      return 0;
+    }
+    const r = applyConfigSets(grokHome, opts.setPairs);
+    for (const x of r.results) {
+      if (x.ok) out(`  ✓ ${x.key}=${x.value}`);
+      else out(`  ✗ ${x.key}=${x.value}  ${x.error}`);
+    }
+    if (!r.ok) {
+      err("set failed — config not saved");
+      return 1;
+    }
+    out(`  → ${r.path}`);
+    writeTmuxConfFile(grokHome);
+    applyTmuxStatusBar({ grokHome });
+    await refreshDashboard({ grokHome, force: true });
+    return 0;
   }
 
   if (opts.settings) {

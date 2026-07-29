@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0
+
+### Productization — doctor fix + non-interactive set
+- **`grok-hud doctor --fix`**: safe local repair (config, hooks, tmux conf,
+  dashboard restart, status refresh). No brew / no login / no destructive ops.
+- **`grok-hud set key=value`**: non-interactive config  
+  (`aesthetic=codex`, `showSpeed=on`, `autoDenseBelow=60`, …) then refresh status.
+- Commands: `commands/set.md`, doctor docs updated.
+- Milestone: A–D roadmap + aesthetics + Phase C + doctor/set surface complete.
+
 ## 0.9.0
 
 ### Enhancement pack — doctor, live preview, auto-dense

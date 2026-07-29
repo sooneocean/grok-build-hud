@@ -23,7 +23,7 @@ Grok 4.5 · AI FILM SPACE/0717 · ●
 | 语言 | 默认 **English**，可切简体中文 / 繁體 |
 
 仓库：http://172.238.15.154:3000/Redredchen01/grok-build-hud  
-插件名：`grok-build-hud` · 版本见 [`plugin.json`](./plugin.json)
+插件名：`grok-build-hud` · **1.0.0**（版本见 [`plugin.json`](./plugin.json)）
 
 > **说明：** 本项目由我们自行开发与维护，**不是** xAI / Grok Build 官方插件或官方功能。仅兼容 Grok 的插件安装机制（`plugin.json` 等），便于本地 `grok plugin install`。
 
@@ -201,7 +201,9 @@ grok-hud-run
 ```bash
 grok-hud status
 grok-hud info                 # aesthetic + 可选芯片 + 数据优先级
-grok-hud doctor               # 本机自检（tmux / 认证 / daemon / 状态新鲜度）
+grok-hud doctor               # 本机自检
+grok-hud doctor --fix          # 安全自愈（hooks / daemon / 状态）
+grok-hud set aesthetic=codex  # 非交互改配置
 grok-hud settings             # 含 a/b/c/d 芯片 · e 窄窗自动 dense
 grok-hud lang zh|en|tw
 grok-build-hud --preset full|essential|minimal

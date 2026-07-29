@@ -6,9 +6,21 @@ description: Run local Grok HUD health check (tmux, auth, dashboard, status)
 
 ```bash
 grok-hud doctor
+grok-hud doctor --fix    # safe auto-repair
 # or
 grok-build-hud --doctor
+grok-build-hud --doctor --fix
 ```
+
+## `--fix` (safe only)
+
+- ensure `config.json`
+- install hooks if missing
+- rewrite tmux conf + apply bar
+- restart dashboard daemon
+- force status refresh  
+
+Does **not**: `brew install`, `grok login`, force-push, delete data.
 
 Checks (local only, no network required for most):
 

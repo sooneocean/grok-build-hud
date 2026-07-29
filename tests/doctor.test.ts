@@ -26,6 +26,7 @@ describe("doctor", () => {
     assert.ok(ids.includes("config"));
     const text = formatDoctorReport(report);
     assert.match(text, /Node/);
+    assert.match(text, /doctor --fix/);
   });
 });
 

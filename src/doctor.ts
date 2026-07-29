@@ -7,9 +7,19 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { defaultGrokHome } from "./session.js";
-import { isDashboardRunning } from "./dashboard.js";
-import { loadHudConfig, configPath } from "./hud-config.js";
-import { packageRoot } from "./install.js";
+import {
+  isDashboardRunning,
+  ensureDashboardDaemon,
+  refreshDashboard,
+  stopDashboard,
+} from "./dashboard.js";
+import {
+  loadHudConfig,
+  configPath,
+  ensureDefaultConfig,
+} from "./hud-config.js";
+import { packageRoot, installGlobalHooks } from "./install.js";
+import { writeTmuxConfFile, applyTmuxStatusBar } from "./tmux-hud.js";
 
 export type CheckLevel = "ok" | "warn" | "fail";
 
@@ -284,11 +294,184 @@ export function formatDoctorReport(report: DoctorReport): string {
     ),
     "",
     "Fix hints:",
+    "  grok-hud doctor --fix   # safe auto-repair",
     "  npm run build && npm link",
     "  bash scripts/install.sh",
     "  grok-hud start   # dashboard",
     "  grok login       # quota",
     "  brew install tmux",
+  ];
+  return lines.join("\n");
+}
+
+export interface DoctorFixAction {
+  id: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface DoctorFixReport {
+  actions: DoctorFixAction[];
+  before: DoctorReport;
+  after: DoctorReport;
+}
+
+/**
+ * Safe local repairs only (no brew, no network login, no force-push).
+ * - ensure config.json
+ * - reinstall hooks if missing
+ * - restart dashboard daemon
+ * - rewrite tmux conf + apply bar
+ * - refresh status files
+ */
+export async function runDoctorFix(
+  options: { grokHome?: string } = {},
+): Promise<DoctorFixReport> {
+  const grokHome = options.grokHome ?? defaultGrokHome();
+  const before = runDoctor({ grokHome });
+  const actions: DoctorFixAction[] = [];
+
+  // Config
+  try {
+    ensureDefaultConfig(grokHome);
+    actions.push({
+      id: "config",
+      ok: true,
+      detail: `config ready: ${configPath(grokHome)}`,
+    });
+  } catch (e) {
+    actions.push({
+      id: "config",
+      ok: false,
+      detail: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  // Hooks
+  try {
+    const hooksPath = path.join(grokHome, "hooks", "grok-build-hud.json");
+    if (!fs.existsSync(hooksPath)) {
+      const { hooksPath: hp } = installGlobalHooks({ grokHome });
+      actions.push({
+        id: "hooks",
+        ok: true,
+        detail: `installed hooks → ${hp}`,
+      });
+    } else {
+      actions.push({
+        id: "hooks",
+        ok: true,
+        detail: "hooks already present",
+      });
+    }
+  } catch (e) {
+    actions.push({
+      id: "hooks",
+      ok: false,
+      detail: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  // Tmux conf
+  try {
+    writeTmuxConfFile(grokHome);
+    applyTmuxStatusBar({ grokHome });
+    actions.push({
+      id: "tmux",
+      ok: true,
+      detail: "tmux conf written + status bar applied (if inside tmux)",
+    });
+  } catch (e) {
+    actions.push({
+      id: "tmux",
+      ok: false,
+      detail: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  // Dashboard restart
+  try {
+    if (isDashboardRunning(grokHome)) {
+      stopDashboard(grokHome);
+    }
+    const entryJs = path.join(packageRoot(), "dist", "src", "index.js");
+    if (!fs.existsSync(entryJs)) {
+      actions.push({
+        id: "dashboard",
+        ok: false,
+        detail: "dist missing — run npm run build first",
+      });
+    } else {
+      const r = ensureDashboardDaemon({
+        grokHome,
+        entryJs,
+        intervalMs: 500,
+      });
+      actions.push({
+        id: "dashboard",
+        ok: Boolean(r.started || r.alreadyRunning),
+        detail: r.alreadyRunning
+          ? `already running${r.pid != null ? ` pid ${r.pid}` : ""}`
+          : r.started
+            ? `started${r.pid != null ? ` pid ${r.pid}` : ""}`
+            : "daemon did not start",
+      });
+    }
+  } catch (e) {
+    actions.push({
+      id: "dashboard",
+      ok: false,
+      detail: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  // Refresh status once
+  try {
+    await refreshDashboard({ grokHome, force: true });
+    actions.push({
+      id: "refresh",
+      ok: true,
+      detail: "status files refreshed",
+    });
+  } catch (e) {
+    actions.push({
+      id: "refresh",
+      ok: false,
+      detail: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  // Touch aesthetic defaults if config exists
+  try {
+    loadHudConfig(grokHome);
+    actions.push({
+      id: "load",
+      ok: true,
+      detail: "config reloaded OK",
+    });
+  } catch (e) {
+    actions.push({
+      id: "load",
+      ok: false,
+      detail: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  const after = runDoctor({ grokHome });
+  return { actions, before, after };
+}
+
+export function formatDoctorFixReport(report: DoctorFixReport): string {
+  const lines = [
+    "grok-hud doctor --fix",
+    "",
+    "Actions:",
+    ...report.actions.map(
+      (a) => `  ${a.ok ? "✓" : "✗"} ${a.id.padEnd(12)} ${a.detail}`,
+    ),
+    "",
+    "After:",
+    formatDoctorReport(report.after),
   ];
   return lines.join("\n");
 }
