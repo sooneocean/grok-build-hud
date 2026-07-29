@@ -17,12 +17,17 @@ import {
   pickFromActiveSessions,
   sessionInputFingerprint,
   isPidAlive,
+  clearSnapshotCache,
 } from "./session.js";
 import { getCreditUsage } from "./billing.js";
 import { writeStatusFiles, formatCompactLine } from "./status.js";
 import { resolveTmuxSessionForGrok } from "./multi-session.js";
-import { gitStamp } from "./git.js";
+import { gitStamp, clearGitInfoCache } from "./git.js";
+import { configPath } from "./hud-config.js";
 import type { SessionSnapshot, UsageSnapshot } from "./types.js";
+
+/** Soft cap on in-memory session caches (long-running daemon). */
+const MAX_CACHED_SESSIONS = 48;
 
 export function dashboardPidPath(grokHome = defaultGrokHome()): string {
   return path.join(grokHome, "hud", "dashboard.pid");
@@ -132,9 +137,20 @@ export function sessionSourceFingerprint(sessionDir: string): string {
   return sessionInputFingerprint(sessionDir);
 }
 
+/** config.json mtime — aesthetic/set must bust pre-skip (1.5). */
+export function hudConfigStamp(grokHome: string): string {
+  try {
+    const p = configPath(grokHome);
+    if (!fs.existsSync(p)) return "0";
+    return String(fs.statSync(p).mtimeMs);
+  } catch {
+    return "0";
+  }
+}
+
 /**
- * Pre-load skip key: file mtimes + live + git stamp + usage.
- * When this matches last tick, skip loadSnapshot + writeStatus entirely (1.4).
+ * Pre-load skip key: file mtimes + live + git stamp + usage + config.
+ * When this matches last tick, skip loadSnapshot + writeStatus entirely (1.4+).
  */
 export function dashboardPreKey(
   sessionId: string,
@@ -143,6 +159,7 @@ export function dashboardPreKey(
     live: boolean;
     cwd?: string;
     usageKey: string;
+    configStamp?: string;
   },
 ): string {
   return [
@@ -151,6 +168,7 @@ export function dashboardPreKey(
     options.live ? "1" : "0",
     options.cwd ? gitStamp(options.cwd) : "",
     options.usageKey,
+    options.configStamp ?? "",
   ].join("|");
 }
 
@@ -194,12 +212,35 @@ const sessionPreCache = new Map<string, string>();
 const sessionTitleCache = new Map<string, string>();
 /** Last known snapshot for skipped primary return. */
 const lastSnapById = new Map<string, SessionSnapshot>();
+/** Last seen config.json mtime — bust caches on set/settings. */
+let lastHudConfigStamp = "";
 
 export function clearDashboardSessionCache(): void {
   sessionFpCache.clear();
   sessionPreCache.clear();
   sessionTitleCache.clear();
   lastSnapById.clear();
+  lastHudConfigStamp = "";
+}
+
+function pruneSessionCaches(liveIds: Set<string>): void {
+  for (const id of [...lastSnapById.keys()]) {
+    if (!liveIds.has(id)) {
+      lastSnapById.delete(id);
+      sessionPreCache.delete(id);
+      sessionFpCache.delete(id);
+      sessionTitleCache.delete(id);
+    }
+  }
+  // Soft cap (oldest insertion order in Map)
+  while (lastSnapById.size > MAX_CACHED_SESSIONS) {
+    const first = lastSnapById.keys().next().value as string | undefined;
+    if (!first) break;
+    lastSnapById.delete(first);
+    sessionPreCache.delete(first);
+    sessionFpCache.delete(first);
+    sessionTitleCache.delete(first);
+  }
 }
 
 function usageKeyOf(usage: UsageSnapshot | null | undefined): string {
@@ -229,6 +270,13 @@ export async function refreshDashboard(options: {
     }
   }
   const uKey = usageKeyOf(usage);
+  const cfgStamp = hudConfigStamp(grokHome);
+  // Config edit (set/settings) must force re-render even if session files idle
+  if (cfgStamp !== lastHudConfigStamp) {
+    lastHudConfigStamp = cfgStamp;
+    clearDashboardSessionCache();
+    clearSnapshotCache();
+  }
 
   // Theme always follows Grok [ui].theme (auto → OS light/dark maps).
   const {
@@ -252,6 +300,8 @@ export async function refreshDashboard(options: {
       writeTmuxConfFile(grokHome);
       applyTmuxStatusBar({ grokHome });
       clearDashboardSessionCache();
+      clearSnapshotCache();
+      clearGitInfoCache();
     }
   } catch {
     /* ignore */
@@ -278,6 +328,7 @@ export async function refreshDashboard(options: {
       live,
       cwd: a.cwd,
       usageKey: uKey,
+      configStamp: cfgStamp,
     });
     const skipLoad =
       !options.force &&
@@ -293,6 +344,7 @@ export async function refreshDashboard(options: {
       skipLoad,
     });
   }
+  pruneSessionCaches(new Set(work.map((w) => w.sessionId)));
 
   // Fallback: no live active entries → pickBest once
   if (!work.length) {

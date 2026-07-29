@@ -116,6 +116,8 @@ export interface CliOptions {
   setPairs: Array<{ key: string; value: string }>;
   /** get key or --keys / empty = full JSON */
   getKey?: string | null;
+  bench: boolean;
+  benchIterations?: number;
   language?: string;
 }
 
@@ -147,6 +149,7 @@ export function parseArgs(argv: string[]): CliOptions {
     doctorFix: false,
     setPairs: [],
     getKey: undefined,
+    bench: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -304,6 +307,13 @@ export function parseArgs(argv: string[]): CliOptions {
         }
         break;
       }
+      case "bench":
+      case "--bench":
+        opts.bench = true;
+        if (argv[i + 1] && /^\d+$/.test(argv[i + 1]!)) {
+          opts.benchIterations = Number(argv[++i]);
+        }
+        break;
       case "--lang":
       case "--language":
         opts.language = argv[++i];
@@ -350,6 +360,7 @@ Also:
   grok-hud doctor --fix          # safe auto-repair (hooks/daemon/status)
   grok-hud set aesthetic=codex  # non-interactive config
   grok-hud get aesthetic        # read one key (or full JSON)
+  grok-hud bench [N]            # micro-benchmark loadSnapshot (default 30)
   grok-hud lang en              # English (default)
   grok-hud lang zh              # 简体中文
   grok-hud lang tw              # 繁體中文
@@ -533,6 +544,21 @@ export async function runCli(
     const report = runDoctor({ grokHome });
     out(formatDoctorReport(report));
     return report.ok ? 0 : 1;
+  }
+
+  if (opts.bench) {
+    try {
+      const { runSnapshotBench, formatBenchResult } = await import("./bench.js");
+      const r = runSnapshotBench({
+        grokHome: opts.grokHome ?? defaultGrokHome(),
+        iterations: opts.benchIterations,
+      });
+      out(formatBenchResult(r));
+      return 0;
+    } catch (e) {
+      err(e instanceof Error ? e.message : String(e));
+      return 1;
+    }
   }
 
   if (opts.getKey !== undefined) {

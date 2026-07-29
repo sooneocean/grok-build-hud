@@ -23,7 +23,7 @@ Grok 4.5 · AI FILM SPACE/0717 · ●
 | 语言 | 默认 **English**，可切简体中文 / 繁體 |
 
 仓库：http://172.238.15.154:3000/Redredchen01/grok-build-hud  
-插件名：`grok-build-hud` · **1.4.0**（版本见 [`plugin.json`](./plugin.json)）
+插件名：`grok-build-hud` · **1.5.0**（版本见 [`plugin.json`](./plugin.json)）
 
 > **说明：** 本项目由我们自行开发与维护，**不是** xAI / Grok Build 官方插件或官方功能。仅兼容 Grok 的插件安装机制（`plugin.json` 等），便于本地 `grok plugin install`。
 
@@ -205,6 +205,7 @@ grok-hud doctor               # 本机自检
 grok-hud doctor --fix          # 安全自愈（hooks / daemon / 状态）
 grok-hud set aesthetic=codex  # 非交互改配置
 grok-hud get aesthetic        # 读配置键 / 全量 JSON
+grok-hud bench                # 冷/热 loadSnapshot 微基准
 grok-hud settings             # 含 a/b/c/d 芯片 · e 窄窗自动 dense
 grok-hud lang zh|en|tw
 grok-build-hud --preset full|essential|minimal
@@ -401,7 +402,7 @@ grok-build-hud/               # Gitea 仓库目录名
 
 **不上传**你的代码。无遥测 / 分析 SDK，详见 [PRIVACY.md](./PRIVACY.md)。
 
-性能（1.3–1.4）：`updates.jsonl` 单遍、git 短缓存、session mtime 缓存；dashboard 在文件/live/git/配额都未变时**整 tick 跳过加载**；OSC 标题仅变化时写；`showSpeed` 关时不写 speed-cache。
+性能（1.3–1.5）：`updates.jsonl` 单遍、git/session 缓存、idle **整 tick 跳过**；**改 config 必刷新**；死 session 缓存回收；`grok-hud bench` 可测冷热路径。
 
 ### 发版（维护者）
 

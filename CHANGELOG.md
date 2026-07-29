@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0
+
+### Cache correctness + bench
+- **Config bust**: `config.json` mtime is part of pre-skip key; on change,
+  dashboard write/session caches clear so `set` / aesthetic apply next tick.
+- **Prune**: drop caches for dead sessions; soft cap 48 entries (daemon memory).
+- **`grok-hud bench [N]`**: cold vs warm `loadSnapshot` micro-benchmark.
+- Theme change also clears git + snapshot caches.
+
 ## 1.4.0
 
 ### Performance — pre-load dashboard skip
