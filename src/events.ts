@@ -93,6 +93,15 @@ export function parseEventsLines(lines: string[]): EventsMetrics {
 /**
  * Tail-read events.jsonl (large files are common on long sessions).
  */
+const eventsFileCache = new Map<
+  string,
+  { mtimeMs: number; size: number; metrics: EventsMetrics }
+>();
+
+export function clearEventsFileCache(): void {
+  eventsFileCache.clear();
+}
+
 export function parseEventsFile(
   filePath: string,
   options: { maxTailBytes?: number } = {},
@@ -101,6 +110,14 @@ export function parseEventsFile(
   const maxTail = options.maxTailBytes ?? 512_000;
   try {
     const stat = fs.statSync(filePath);
+    const cached = eventsFileCache.get(filePath);
+    if (
+      cached &&
+      cached.mtimeMs === stat.mtimeMs &&
+      cached.size === stat.size
+    ) {
+      return cached.metrics;
+    }
     let content: string;
     if (stat.size <= maxTail) {
       content = fs.readFileSync(filePath, "utf8");
@@ -123,7 +140,13 @@ export function parseEventsFile(
         }
       }
     }
-    return parseEventsLines(content.split(/\r?\n/));
+    const metrics = parseEventsLines(content.split(/\r?\n/));
+    eventsFileCache.set(filePath, {
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      metrics,
+    });
+    return metrics;
   } catch {
     return emptyEventsMetrics();
   }

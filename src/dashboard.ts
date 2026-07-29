@@ -18,12 +18,14 @@ import {
   sessionInputFingerprint,
   isPidAlive,
   clearSnapshotCache,
+  clearSessionDirIndex,
 } from "./session.js";
 import { getCreditUsage } from "./billing.js";
 import { writeStatusFiles, formatCompactLine } from "./status.js";
 import { resolveTmuxSessionForGrok } from "./multi-session.js";
 import { gitStamp, clearGitInfoCache } from "./git.js";
-import { configPath } from "./hud-config.js";
+import { configPath, clearHudConfigCache } from "./hud-config.js";
+import { clearEventsFileCache } from "./events.js";
 import type { SessionSnapshot, UsageSnapshot } from "./types.js";
 
 /** Soft cap on in-memory session caches (long-running daemon). */
@@ -223,6 +225,16 @@ export function clearDashboardSessionCache(): void {
   lastHudConfigStamp = "";
 }
 
+/** Clear all process-local hot-path caches (bench / config·theme force). */
+export function clearAllHotPathCaches(): void {
+  clearDashboardSessionCache();
+  clearSnapshotCache();
+  clearGitInfoCache();
+  clearSessionDirIndex();
+  clearEventsFileCache();
+  clearHudConfigCache();
+}
+
 function pruneSessionCaches(liveIds: Set<string>): void {
   for (const id of [...lastSnapById.keys()]) {
     if (!liveIds.has(id)) {
@@ -276,6 +288,7 @@ export async function refreshDashboard(options: {
     lastHudConfigStamp = cfgStamp;
     clearDashboardSessionCache();
     clearSnapshotCache();
+    clearHudConfigCache();
   }
 
   // Theme always follows Grok [ui].theme (auto → OS light/dark maps).
@@ -299,9 +312,8 @@ export async function refreshDashboard(options: {
       );
       writeTmuxConfFile(grokHome);
       applyTmuxStatusBar({ grokHome });
-      clearDashboardSessionCache();
-      clearSnapshotCache();
-      clearGitInfoCache();
+      clearAllHotPathCaches();
+      lastHudConfigStamp = cfgStamp;
     }
   } catch {
     /* ignore */

@@ -66,13 +66,33 @@ export function readJsonFile<T>(filePath: string): T | null {
   }
 }
 
+const activeSessionsCache = new Map<
+  string,
+  { mtimeMs: number; entries: ActiveSessionEntry[] }
+>();
+
 export function loadActiveSessions(grokHome: string): ActiveSessionEntry[] {
   const p = path.join(grokHome, "active_sessions.json");
-  const data = readJsonFile<ActiveSessionEntry[] | { sessions?: ActiveSessionEntry[] }>(p);
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data.sessions)) return data.sessions;
-  return [];
+  try {
+    if (!fs.existsSync(p)) {
+      activeSessionsCache.delete(grokHome);
+      return [];
+    }
+    const mtimeMs = fs.statSync(p).mtimeMs;
+    const hit = activeSessionsCache.get(grokHome);
+    if (hit && hit.mtimeMs === mtimeMs) return hit.entries;
+    const data = readJsonFile<
+      ActiveSessionEntry[] | { sessions?: ActiveSessionEntry[] }
+    >(p);
+    let entries: ActiveSessionEntry[] = [];
+    if (Array.isArray(data)) entries = data;
+    else if (data && Array.isArray(data.sessions)) entries = data.sessions;
+    activeSessionsCache.set(grokHome, { mtimeMs, entries });
+    return entries;
+  } catch {
+    activeSessionsCache.delete(grokHome);
+    return [];
+  }
 }
 
 export function isPidAlive(pid?: number): boolean {
@@ -565,32 +585,60 @@ export function pickBestSession(options: DiscoverOptions = {}): SessionSnapshot 
   return all[0] ?? null;
 }
 
+/** sessionId → absolute dir (rebuilt when sessions root listing changes). */
+const sessionDirIndex = new Map<
+  string,
+  { stamp: string; byId: Map<string, string> }
+>();
+
+function sessionsRootStamp(grokHome: string): string {
+  const root = path.join(grokHome, "sessions");
+  try {
+    if (!fs.existsSync(root)) return "0";
+    const st = fs.statSync(root);
+    // size of readdir as cheap dirtiness proxy + mtime
+    const n = fs.readdirSync(root).length;
+    return `${st.mtimeMs}:${n}`;
+  } catch {
+    return "?";
+  }
+}
+
+function rebuildSessionDirIndex(grokHome: string): Map<string, string> {
+  const byId = new Map<string, string>();
+  for (const dir of listSessionDirs(grokHome)) {
+    byId.set(path.basename(dir), dir);
+  }
+  sessionDirIndex.set(grokHome, {
+    stamp: sessionsRootStamp(grokHome),
+    byId,
+  });
+  return byId;
+}
+
+export function clearSessionDirIndex(): void {
+  sessionDirIndex.clear();
+  activeSessionsCache.clear();
+}
+
 /** Find session directory by exact session id (basename). */
 export function findSessionDirById(
   grokHome: string,
   sessionId: string,
 ): string | null {
   if (!sessionId) return null;
-  for (const dir of listSessionDirs(grokHome)) {
-    if (path.basename(dir) === sessionId) return dir;
+  const stamp = sessionsRootStamp(grokHome);
+  let idx = sessionDirIndex.get(grokHome);
+  if (!idx || idx.stamp !== stamp) {
+    rebuildSessionDirIndex(grokHome);
+    idx = sessionDirIndex.get(grokHome)!;
   }
-  // Fast path: scan sessions/*/<id>
-  const root = path.join(grokHome, "sessions");
-  if (!fs.existsSync(root)) return null;
-  try {
-    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const candidate = path.join(root, entry.name, sessionId);
-      if (
-        fs.existsSync(path.join(candidate, "signals.json")) ||
-        fs.existsSync(path.join(candidate, "summary.json"))
-      ) {
-        return candidate;
-      }
-    }
-  } catch {
-    return null;
-  }
+  const hit = idx.byId.get(sessionId);
+  if (hit && fs.existsSync(hit)) return hit;
+  // Miss: rebuild once (new session created mid-tick)
+  rebuildSessionDirIndex(grokHome);
+  const again = sessionDirIndex.get(grokHome)?.byId.get(sessionId);
+  if (again && fs.existsSync(again)) return again;
   return null;
 }
 

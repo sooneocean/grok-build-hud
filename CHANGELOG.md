@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.6.0
+
+### Deep hot-path optimization
+- **Single-pass updates parse**: `parseUpdatesLines({ onObject })` folds
+  turn_completed tokens into the same `JSON.parse` as tools/agents/todos
+  (no second line scan in `parseUpdatesBundle`).
+- **`loadHudConfig` mtime cache**: skip re-parse of `config.json` when mtime
+  unchanged; `saveHudConfig` updates the entry.
+- **`loadActiveSessions` mtime cache** + **`findSessionDirById` dir index**
+  (stamp on sessions root listing; miss rebuilds once).
+- **`parseEventsFile` mtime+size cache** for large `events.jsonl` tails.
+- **`clearAllHotPathCaches()`**: one shot for bench / theme force; config
+  stamp still clears write caches + hud-config cache.
+- Tests cover multi-turn token parity, config/events/active/session-dir caches.
+
 ## 1.5.0
 
 ### Cache correctness + bench

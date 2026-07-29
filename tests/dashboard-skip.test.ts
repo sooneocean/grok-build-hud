@@ -82,4 +82,11 @@ describe("dashboard session skip (Phase C + 1.4)", () => {
     clearDashboardSessionCache();
     assert.ok(true);
   });
+
+  it("clearAllHotPathCaches is safe", async () => {
+    const { clearAllHotPathCaches } = await import("../src/dashboard.js");
+    clearAllHotPathCaches();
+    clearAllHotPathCaches();
+    assert.ok(true);
+  });
 });

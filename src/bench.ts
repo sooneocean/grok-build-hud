@@ -7,11 +7,9 @@ import {
   loadSnapshotFromDir,
   findSessionDirById,
   pickBestSession,
-  clearSnapshotCache,
   sessionInputFingerprint,
 } from "./session.js";
-import { clearGitInfoCache } from "./git.js";
-import { clearDashboardSessionCache } from "./dashboard.js";
+import { clearAllHotPathCaches } from "./dashboard.js";
 
 export interface BenchResult {
   iterations: number;
@@ -61,10 +59,8 @@ export function runSnapshotBench(
   const active = loadActiveSessions(grokHome);
   const fp = sessionInputFingerprint(sessionDir);
 
-  // Cold: clear all caches
-  clearSnapshotCache();
-  clearGitInfoCache();
-  clearDashboardSessionCache();
+  // Cold: clear all hot-path caches (snapshot/git/events/config/dir index)
+  clearAllHotPathCaches();
   const t0 = performance.now();
   const coldSnap = loadSnapshotFromDir(sessionDir, {
     active,

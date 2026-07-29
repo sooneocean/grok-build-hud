@@ -6,8 +6,9 @@ import type {
   ToolActivityItem,
 } from "./types.js";
 import {
+  addTokenBreakdown,
   emptyTokenBreakdown,
-  parseTokenUsageFromLines,
+  parseUsageObject,
   readUpdatesText,
 } from "./token-usage.js";
 
@@ -22,8 +23,19 @@ interface ToolState {
 /**
  * Parse Grok `updates.jsonl` for tool / agent activity.
  * Pure-ish: accepts optional pre-split lines for tests.
+ * Optional onObject: extra work on same JSON.parse (1.6 single-pass tokens).
  */
-export function parseUpdatesLines(lines: string[]): {
+export function parseUpdatesLines(
+  lines: string[],
+  options: {
+    onObject?: (
+      obj: Record<string, unknown>,
+      update: Record<string, unknown>,
+      kind: string,
+      lineNo: number,
+    ) => void;
+  } = {},
+): {
   tools: ToolActivityItem[];
   agents: AgentActivityItem[];
   todos: TodoItem[];
@@ -32,6 +44,7 @@ export function parseUpdatesLines(lines: string[]): {
   const agents: AgentActivityItem[] = [];
   let todos: TodoItem[] = [];
   let lineNo = 0;
+  const onObject = options.onObject;
 
   for (const raw of lines) {
     lineNo += 1;
@@ -53,6 +66,8 @@ export function parseUpdatesLines(lines: string[]): {
       (update.sessionUpdate as string | undefined) ??
       (obj.sessionUpdate as string | undefined) ??
       "";
+
+    if (onObject) onObject(obj, update, kind, lineNo);
 
     const ts =
       typeof obj.timestamp === "number"
@@ -260,15 +275,27 @@ export function parseUpdatesBundle(filePath: string): {
   try {
     const content = readUpdatesText(filePath);
     const lines = content.split(/\r?\n/);
-    const activity = parseUpdatesLines(lines);
-    const tokens = parseTokenUsageFromLines(lines);
+    // Single JSON.parse pass: activity + turn_completed tokens (1.6)
+    let lastTurn: TokenBreakdown | null = null;
+    let session = emptyTokenBreakdown();
+    let turnCount = 0;
+    const activity = parseUpdatesLines(lines, {
+      onObject: (_obj, update, kind) => {
+        if (kind !== "turn_completed") return;
+        const usage = parseUsageObject(update.usage ?? _obj.usage);
+        if (!usage) return;
+        lastTurn = usage;
+        session = addTokenBreakdown(session, usage);
+        turnCount += 1;
+      },
+    });
     return {
       tools: activity.tools,
       agents: activity.agents,
       todos: activity.todos,
-      lastTurn: tokens.lastTurn,
-      session: tokens.session,
-      turnCount: tokens.turnCount,
+      lastTurn,
+      session,
+      turnCount,
     };
   } catch {
     return {

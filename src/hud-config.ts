@@ -400,6 +400,16 @@ export function configPath(grokHome = path.join(os.homedir(), ".grok")): string 
   return path.join(grokHome, "hud", "config.json");
 }
 
+/** mtime-keyed config cache (writeStatusFiles hits this every paint). */
+const hudConfigCache = new Map<
+  string,
+  { mtimeMs: number; cfg: HudDisplayConfig }
+>();
+
+export function clearHudConfigCache(): void {
+  hudConfigCache.clear();
+}
+
 export function loadHudConfig(
   grokHome = path.join(os.homedir(), ".grok"),
 ): HudDisplayConfig {
@@ -414,6 +424,11 @@ export function loadHudConfig(
         projectLineOrder: [...DEFAULT_PROJECT_LINE_ORDER],
         display: { ...PRESET_FULL.display },
       };
+    }
+    const mtimeMs = fs.statSync(p).mtimeMs;
+    const hit = hudConfigCache.get(grokHome);
+    if (hit && hit.mtimeMs === mtimeMs) {
+      return hit.cfg;
     }
     const raw = JSON.parse(fs.readFileSync(p, "utf8")) as Partial<HudDisplayConfig>;
     const base =
@@ -437,7 +452,7 @@ export function loadHudConfig(
         : [...DEFAULT_PROJECT_LINE_ORDER]);
     const aesthetic = normalizeAesthetic(raw.aesthetic ?? base.aesthetic);
     const calmAesthetic = aesthetic === "codex" || aesthetic === "dense";
-    return {
+    const cfg: HudDisplayConfig = {
       ...base,
       ...raw,
       language: raw.language ?? base.language ?? "en",
@@ -506,6 +521,8 @@ export function loadHudConfig(
         ),
       },
     };
+    hudConfigCache.set(grokHome, { mtimeMs, cfg });
+    return cfg;
   } catch {
     return {
       ...PRESET_FULL,
@@ -577,6 +594,12 @@ export function saveHudConfig(
   const p = configPath(grokHome);
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, JSON.stringify(cfg, null, 2) + "\n", "utf8");
+  try {
+    const mtimeMs = fs.statSync(p).mtimeMs;
+    hudConfigCache.set(grokHome, { mtimeMs, cfg });
+  } catch {
+    clearHudConfigCache();
+  }
   return p;
 }
 
